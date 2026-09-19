@@ -18,12 +18,31 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-interface ToolCardProps {
+export interface ToolCardProps {
+  id?: string;
   name: string;
-  description: string;
+  description?: string;
+  automationLevel?: number; // 0: automate, 1: confirm, 2: disabled
+  rules?: string;
   defaultMode?: "automate" | "confirm" | "disable";
+}
+
+export function levelToMode(
+  level: number | undefined
+): "automate" | "confirm" | "disable" {
+  if (level === 0) return "automate";
+  if (level === 2) return "disable";
+  return "confirm";
+}
+
+export function modeToLevel(mode: "automate" | "confirm" | "disable"): number {
+  if (mode === "automate") return 0;
+  if (mode === "disable") return 2;
+  return 1;
 }
 
 const modeConfig = {
@@ -42,22 +61,61 @@ const modeConfig = {
 };
 
 export function ToolCard({
+  id,
   name,
-  description,
+  description = "",
+  automationLevel,
+  rules: initialRules = "",
   defaultMode = "confirm",
 }: ToolCardProps) {
-  const [mode, setMode] = useState<"automate" | "confirm" | "disable">(
-    defaultMode
-  );
+  const initialMode =
+    typeof automationLevel === "number"
+      ? levelToMode(automationLevel)
+      : defaultMode;
+
+  const [mode, setMode] =
+    useState<"automate" | "confirm" | "disable">(initialMode);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [rules, setRules] = useState("");
-  const [savedRules, setSavedRules] = useState("");
+  const [rules, setRules] = useState(initialRules);
+  const [savedRules, setSavedRules] = useState(initialRules);
+  const [saving, setSaving] = useState(false);
 
   const currentMode = modeConfig[mode];
 
-  const handleConfirmRules = () => {
+  const handleModeChange = async (
+    newMode: "automate" | "confirm" | "disable" | null
+  ) => {
+    if (!newMode) return;
+    setMode(newMode);
+    if (!id) return;
+
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "bank-tools", id), {
+        "automation-level": modeToLevel(newMode),
+      });
+    } catch (error) {
+      console.error(`Failed to update automation level for ${name}:`, error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmRules = async () => {
     setSavedRules(rules);
     setRulesOpen(false);
+    if (!id) return;
+
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "bank-tools", id), {
+        rules: rules,
+      });
+    } catch (error) {
+      console.error(`Failed to update rules for ${name}:`, error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -67,28 +125,39 @@ export function ToolCard({
         <span
           className={`shrink-0 h-3 w-3 rounded-full ${currentMode.dotColor} transition-colors duration-300`}
           style={{
-            boxShadow: `0 0 6px ${mode === "automate" ? "rgba(16,185,129,0.35)" : mode === "confirm" ? "rgba(245,158,11,0.35)" : "rgba(239,68,68,0.35)"}`,
+            boxShadow: `0 0 6px ${
+              mode === "automate"
+                ? "rgba(16,185,129,0.35)"
+                : mode === "confirm"
+                ? "rgba(245,158,11,0.35)"
+                : "rgba(239,68,68,0.35)"
+            }`,
           }}
         />
 
         {/* Tool Info */}
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-foreground text-base leading-tight">
-            {name}
-          </h3>
-          <p className="text-sm text-muted-foreground mt-0.5 truncate">
-            {description}
-          </p>
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium text-foreground text-base leading-tight">
+              {name}
+            </h3>
+            {saving && (
+              <span className="flex items-center text-xs text-muted-foreground gap-1 animate-pulse">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="text-[11px]">Saving...</span>
+              </span>
+            )}
+          </div>
+          {description && (
+            <p className="text-sm text-muted-foreground mt-0.5 truncate">
+              {description}
+            </p>
+          )}
         </div>
 
         {/* Controls */}
         <div className="flex items-center gap-3 shrink-0">
-          <Select
-            value={mode}
-            onValueChange={(v) =>
-              setMode(v as "automate" | "confirm" | "disable")
-            }
-          >
+          <Select value={mode} onValueChange={handleModeChange}>
             <SelectTrigger className="w-[140px] h-9 text-sm">
               <SelectValue />
             </SelectTrigger>
@@ -147,14 +216,16 @@ export function ToolCard({
               placeholder={`e.g. Item has been charged three times\nPrice of item is over $10`}
               value={rules}
               onChange={(e) => setRules(e.target.value)}
-              className="min-h-[150px] resize-none text-sm"
+              className="min-h-[150px] resize-none text-sm font-mono"
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRulesOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmRules}>Confirm</Button>
+            <Button onClick={handleConfirmRules} disabled={saving}>
+              {saving ? "Saving..." : "Confirm"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,14 +1,14 @@
-import React from "react";
-import { View, Text } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-  withDelay,
-} from "react-native-reanimated";
 import { useEffect } from "react";
+import { Text, View } from "react-native";
+import Animated, {
+    FadeInLeft,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withRepeat,
+    withSequence,
+    withTiming,
+} from "react-native-reanimated";
 
 export function TypingIndicator() {
   const dot1 = useSharedValue(0.3);
@@ -40,17 +40,14 @@ export function TypingIndicator() {
   const dotStyle3 = useAnimatedStyle(() => ({ opacity: dot3.value }));
 
   return (
-    <View className="flex items-start mb-3 px-4">
-      <View className="flex-row items-center mb-1.5 ml-1">
-        <View className="w-6 h-6 rounded-full bg-chase-blue items-center justify-center mr-2">
-          <Text className="text-white text-xs font-bold">B</Text>
-        </View>
-        <Text className="text-xs text-chase-textSecondary font-medium">
-          Bank Assistant
-        </Text>
-      </View>
-
-      <View className="bg-chase-aiBubble rounded-2xl rounded-bl-md border border-chase-border px-5 py-4 flex-row items-center gap-1.5">
+    <View className="mb-5 flex items-start px-4">
+      <Text className="mb-1.5 mt-1.5 text-[12px] font-semibold text-chase-textMuted">
+        Assistant
+      </Text>
+      <Animated.View
+        entering={FadeInLeft.duration(220).springify().damping(18)}
+        className="rounded-[14px] rounded-bl-[4px] border border-chase-border bg-white px-[14px] py-3"
+      >
         <Animated.View
           style={dotStyle1}
           className="w-2.5 h-2.5 rounded-full bg-chase-blue"
@@ -63,7 +60,7 @@ export function TypingIndicator() {
           style={dotStyle3}
           className="w-2.5 h-2.5 rounded-full bg-chase-blue"
         />
-      </View>
+      </Animated.View>
     </View>
   );
 }

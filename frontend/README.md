@@ -16,6 +16,12 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+### Firebase authentication
+
+Copy `.env.example` to `.env` and fill in the Firebase Web app configuration values from the Firebase console. Enable Email/Password under Firebase Authentication. The app redirects unauthenticated users to `/login` and sends Firebase ID tokens as Bearer tokens to the chat API.
+
+The backend must verify that token with Firebase Admin before processing `/api/chat`; the frontend never sends or trusts a client-provided user ID.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)

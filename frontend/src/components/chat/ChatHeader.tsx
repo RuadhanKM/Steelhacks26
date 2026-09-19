@@ -1,7 +1,6 @@
-import React from "react";
-import { View, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-export function ChatHeader() {
+export function ChatHeader({ onSignOut }: Readonly<{ onSignOut: () => void }>) {
   return (
     <View className="bg-white border-b border-chase-border px-5 pt-2 pb-3">
       <View className="flex-row items-center">
@@ -22,6 +21,9 @@ export function ChatHeader() {
             </Text>
           </View>
         </View>
+        <Pressable onPress={onSignOut} accessibilityRole="button">
+          <Text className="text-sm font-semibold text-chase-blue">Sign out</Text>
+        </Pressable>
       </View>
     </View>
   );

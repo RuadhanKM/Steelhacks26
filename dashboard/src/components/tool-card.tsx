@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText, Loader2, Pencil, Check } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -63,7 +63,7 @@ const modeConfig = {
 export function ToolCard({
   id,
   name,
-  description = "",
+  description: initialDescription = "",
   automationLevel,
   rules: initialRules = "",
   defaultMode = "confirm",
@@ -79,6 +79,13 @@ export function ToolCard({
   const [rules, setRules] = useState(initialRules);
   const [savedRules, setSavedRules] = useState(initialRules);
   const [saving, setSaving] = useState(false);
+
+  // Inline description editing state
+  const [description, setDescription] = useState(initialDescription);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionInput, setDescriptionInput] = useState(initialDescription);
+  const [savingDescription, setSavingDescription] = useState(false);
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const currentMode = modeConfig[mode];
 
@@ -118,6 +125,26 @@ export function ToolCard({
     }
   };
 
+  const handleSaveDescription = async () => {
+    const trimmed = descriptionInput.trim();
+    setDescription(trimmed);
+    setIsEditingDescription(false);
+
+    if (id && trimmed !== description) {
+      setSavingDescription(true);
+      try {
+        await updateDoc(doc(db, "bank-tools", id), {
+          description: trimmed,
+        });
+      } catch (error) {
+        console.error(`Failed to update description for ${name}:`, error);
+        setDescription(description); // Rollback on failure
+      } finally {
+        setSavingDescription(false);
+      }
+    }
+  };
+
   return (
     <>
       <div className="flex items-center gap-5 rounded-lg border border-border bg-card px-6 py-5 shadow-sm">
@@ -141,17 +168,82 @@ export function ToolCard({
             <h3 className="font-medium text-foreground text-base leading-tight">
               {name}
             </h3>
-            {saving && (
+            {(saving || savingDescription) && (
               <span className="flex items-center text-xs text-muted-foreground gap-1 animate-pulse">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 <span className="text-[11px]">Saving...</span>
               </span>
             )}
           </div>
-          {description && (
-            <p className="text-sm text-muted-foreground mt-0.5 truncate">
-              {description}
-            </p>
+
+          {isEditingDescription ? (
+            <div className="relative mt-2 w-full">
+              <textarea
+                ref={(el) => el?.focus()}
+                value={descriptionInput}
+                onChange={(e) => setDescriptionInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSaveDescription();
+                  } else if (e.key === "Escape") {
+                    setIsEditingDescription(false);
+                    setDescriptionInput(description);
+                  }
+                }}
+                onBlur={(e) => {
+                  if (
+                    e.relatedTarget &&
+                    confirmButtonRef.current?.contains(e.relatedTarget as Node)
+                  ) {
+                    return;
+                  }
+                  setIsEditingDescription(false);
+                  setDescriptionInput(description);
+                }}
+                rows={2}
+                className="w-full text-xs rounded-md border border-input bg-background pl-2.5 pr-8 py-1.5 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
+                placeholder="Enter description and press Enter..."
+                disabled={savingDescription}
+              />
+              <button
+                ref={confirmButtonRef}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleSaveDescription}
+                disabled={savingDescription}
+                className="absolute right-2 bottom-2.5 inline-flex items-center justify-center h-5 w-5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                title="Confirm (Enter)"
+              >
+                {savingDescription ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setDescriptionInput(description);
+                setIsEditingDescription(true);
+              }}
+              className="group/desc flex items-center gap-2 mt-0.5 text-left rounded-md px-1.5 py-0.5 -ml-1.5 hover:bg-accent/80 transition-colors cursor-pointer w-fit max-w-full"
+              title="Click to edit description"
+            >
+              <span
+                className="text-sm text-muted-foreground group-hover/desc:text-foreground transition-colors truncate"
+                title={description}
+              >
+                {description || (
+                  <span className="italic text-muted-foreground/60">
+                    No description added yet
+                  </span>
+                )}
+              </span>
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 group-hover/desc:text-primary transition-colors shrink-0" />
+            </button>
           )}
         </div>
 
@@ -159,24 +251,28 @@ export function ToolCard({
         <div className="flex items-center gap-3 shrink-0">
           <Select value={mode} onValueChange={handleModeChange}>
             <SelectTrigger className="w-[140px] h-9 text-sm">
-              <SelectValue />
+              <SelectValue className="capitalize">
+                {(val: "automate" | "confirm" | "disable" | null) =>
+                  val && modeConfig[val] ? modeConfig[val].label : val
+                }
+              </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="min-w-[150px]">
               <SelectItem value="automate">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="flex items-center gap-2.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
                   Automate
                 </span>
               </SelectItem>
               <SelectItem value="confirm">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="flex items-center gap-2.5">
+                  <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
                   Confirm
                 </span>
               </SelectItem>
               <SelectItem value="disable">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="flex items-center gap-2.5">
+                  <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
                   Disable
                 </span>
               </SelectItem>

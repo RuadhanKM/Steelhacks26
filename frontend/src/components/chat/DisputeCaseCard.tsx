@@ -80,59 +80,79 @@ export function DisputeCaseCard({ case: disputeCase, onRefreshed }: DisputeCaseC
       : null;
 
   return (
-    <Animated.View entering={FadeIn.duration(200)} className="px-4 py-2">
-      <View className="rounded-2xl border border-chase-border bg-chase-card p-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-[15px] font-semibold text-chase-textPrimary">
-            {isFraud ? "Fraud claim" : "Dispute case"}
-          </Text>
-          <Pressable
-            accessibilityLabel="Refresh case status"
-            accessibilityRole="button"
-            disabled={refreshing}
-            onPress={handleRefresh}
-            className="flex-row items-center"
-          >
-            <RefreshCw color="#6F647B" size={13} strokeWidth={2} />
-            <Text className="ml-1.5 text-[12px] text-chase-textSecondary">
-              {refreshing ? "Checking…" : "Refresh"}
+    <View className="mb-5 px-4 flex items-start">
+      <Animated.View
+        entering={FadeIn.duration(200)}
+        style={{
+          alignSelf: "flex-start",
+          width: "100%",
+          maxWidth: 360,
+          backgroundColor: "#FFFFFF",
+          borderColor: "#D4C8E0",
+          borderWidth: 1,
+          borderRadius: 14,
+          borderBottomLeftRadius: 4,
+          overflow: "hidden",
+        }}
+      >
+        <View className="p-4">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[15px] font-semibold text-chase-textPrimary">
+              {isFraud ? "Fraud claim" : "Dispute case"}
             </Text>
-          </Pressable>
-        </View>
+            <Pressable
+              accessibilityLabel="Refresh case status"
+              accessibilityRole="button"
+              disabled={refreshing}
+              onPress={handleRefresh}
+              className="flex-row items-center p-1 rounded-md"
+              style={({ pressed, hovered }) => ({
+                backgroundColor:
+                  pressed ? "#E5E7EB" : hovered ? "rgba(91, 61, 133, 0.08)" : "transparent",
+                cursor: (refreshing ? "not-allowed" : "pointer") as any,
+              })}
+            >
+              <RefreshCw color="#6F647B" size={13} strokeWidth={2} />
+              <Text className="ml-1.5 text-[12px] text-chase-textSecondary">
+                {refreshing ? "Checking…" : "Refresh"}
+              </Text>
+            </Pressable>
+          </View>
 
-        <Text className={`mt-2 text-[13px] font-semibold ${status.tone}`}>{status.label}</Text>
-        <Text className="mt-0.5 text-[13px] leading-5 text-chase-textSecondary">
-          {status.detail}
-        </Text>
+          <Text className={`mt-2 text-[13px] font-semibold ${status.tone}`}>{status.label}</Text>
+          <Text className="mt-0.5 text-[13px] leading-5 text-chase-textSecondary">
+            {status.detail}
+          </Text>
 
-        <View className="mt-3 border-t border-chase-border pt-3">
-          <Text className="text-[12px] text-chase-textMuted">
-            Case {disputeCase.id}
-            {disputeCase.merchant ? ` · ${disputeCase.merchant}` : ""}
-            {amount ? ` · ${amount}` : ""}
-          </Text>
-          <Text className="mt-1 text-[12px] text-chase-textMuted">
-            {disputeCase.transactionIds.length} charge
-            {disputeCase.transactionIds.length === 1 ? "" : "s"} under review
-            {disputeCase.cardAction === "lock"
-              ? " · card blocked"
-              : disputeCase.cardAction === "replace"
-                ? " · card replaced"
-                : ""}
-          </Text>
-          {provisionalCents > 0 && (
+          <View className="mt-3 border-t border-chase-border pt-3">
+            <Text className="text-[12px] text-chase-textMuted">
+              Case {disputeCase.id}
+              {disputeCase.merchant ? ` · ${disputeCase.merchant}` : ""}
+              {amount ? ` · ${amount}` : ""}
+            </Text>
             <Text className="mt-1 text-[12px] text-chase-textMuted">
-              Temporary credit of ${(provisionalCents / 100).toFixed(2)} posted while the bank
-              investigates.
+              {disputeCase.transactionIds.length} charge
+              {disputeCase.transactionIds.length === 1 ? "" : "s"} under review
+              {disputeCase.cardAction === "lock"
+                ? " · card blocked"
+                : disputeCase.cardAction === "replace"
+                  ? " · card replaced"
+                  : ""}
             </Text>
-          )}
-          {disputeCase.reviewNote && (
-            <Text className="mt-2 text-[12px] italic text-chase-textSecondary">
-              Reviewer: {disputeCase.reviewNote}
-            </Text>
-          )}
+            {provisionalCents > 0 && (
+              <Text className="mt-1 text-[12px] text-chase-textMuted">
+                Temporary credit of ${(provisionalCents / 100).toFixed(2)} posted while the bank
+                investigates.
+              </Text>
+            )}
+            {disputeCase.reviewNote && (
+              <Text className="mt-2 text-[12px] italic text-chase-textSecondary">
+                Reviewer: {disputeCase.reviewNote}
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 }

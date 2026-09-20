@@ -87,11 +87,13 @@ const styles = StyleSheet.create({
     height: 0,
     borderRightColor: "transparent",
     borderBottomColor: "#FFFFFF",
-    borderBottomWidth: 86,
+    borderBottomWidth: 70,
     borderStyle: "solid",
   },
+  // Tall enough to hold the actions row and no taller, so the pitch above it
+  // stays on the purple where its light text is readable.
   block: {
-    height: 300,
+    height: 180,
     backgroundColor: "#FFFFFF",
   },
   safeArea: {

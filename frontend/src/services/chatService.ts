@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   DisputeForm,
   ToolTrace,
+  TriageForm,
 } from "@/types/chat";
 
 export {
@@ -20,6 +21,7 @@ export interface ChatReply {
   sourcedFrom: string[];
   toolTraces: ToolTrace[];
   disputeForm: DisputeForm | null;
+  fraudTriage: TriageForm | null;
 }
 
 export async function sendMessage(
@@ -51,6 +53,7 @@ export async function sendMessage(
       timestamp: new Date(trace.timestamp),
     })),
     disputeForm: data.disputeForm ?? null,
+    fraudTriage: data.fraudTriage ?? null,
   };
 }
 

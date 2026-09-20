@@ -36,6 +36,10 @@ export interface ChatSystemNotice {
 export interface DisputeFormOption {
   value: string;
   label: string;
+  /** Triage answers: whether this answer opens a claim, and what it means. */
+  opensClaim?: boolean | null;
+  outcome?: string | null;
+  status?: string | null;
   accountId?: string | null;
   merchant?: string | null;
   amountCents?: number | null;
@@ -51,6 +55,8 @@ export interface DisputeFormField {
   required: boolean;
   helpText?: string | null;
   prefill?: unknown;
+  /** e.g. {"recognition": "not_recognised"} — only show this field for that answer. */
+  showWhen?: Record<string, string> | null;
   options: DisputeFormOption[];
 }
 
@@ -67,6 +73,41 @@ export interface DisputeForm {
   fields: DisputeFormField[];
 }
 
+/**
+ * The "did you make this?" form. An unfamiliar merchant name is not proof of
+ * theft, so this is asked before any card is blocked or claim opened.
+ */
+export interface TriageForm {
+  formId: string;
+  title: string;
+  description: string;
+  investigationNotice: string;
+  expiresAt: string;
+  policyConfigVersion: string;
+  fields: DisputeFormField[];
+}
+
+export type CardStatus = "active" | "locked" | "cancelled";
+
+export interface Card {
+  id: string;
+  accountId?: string | null;
+  network?: string | null;
+  type?: string | null;
+  last4?: string | null;
+  status: CardStatus;
+  replacementOrdered?: boolean | null;
+}
+
+export interface TriageResult {
+  recognition: string;
+  /** no_claim | claim_opened | claim_already_open */
+  outcome: string;
+  message: string;
+  claim?: DisputeCase | null;
+  card?: Card | null;
+}
+
 export type DisputeStatus = "submitted" | "under_review" | "resolved" | "rejected";
 
 export interface DisputeCase {
@@ -80,6 +121,12 @@ export interface DisputeCase {
   reviewNote?: string | null;
   reversalAmountCents?: number | null;
   createdAt?: string | null;
+  /** Fraud claims carry what happened to the card and any temporary credit. */
+  claimType?: string | null;
+  cardAction?: string | null;
+  provisionalCreditCents?: number | null;
+  provisionalCreditPermanent?: boolean | null;
+  provisionalCreditReversedTransactionId?: string | null;
 }
 
 /** The form rendered inside the conversation, and the case it opens. */
@@ -96,7 +143,19 @@ export interface ChatDisputeCase {
   case: DisputeCase;
 }
 
-export type ChatEntry = ChatMessage | ChatSystemNotice | ChatDisputeForm | ChatDisputeCase;
+export interface ChatTriageForm {
+  kind: "triage_form";
+  id: string;
+  form: TriageForm;
+  result?: TriageResult;
+}
+
+export type ChatEntry =
+  | ChatMessage
+  | ChatSystemNotice
+  | ChatDisputeForm
+  | ChatDisputeCase
+  | ChatTriageForm;
 
 export interface ChatMessageGroup {
   id: string;
@@ -111,7 +170,8 @@ export type ChatTimelineItem =
   | { type: "group"; id: string; group: ChatMessageGroup }
   | { type: "system_notice"; id: string; notice: ChatSystemNotice }
   | { type: "dispute_form"; id: string; entry: ChatDisputeForm }
-  | { type: "dispute_case"; id: string; entry: ChatDisputeCase };
+  | { type: "dispute_case"; id: string; entry: ChatDisputeCase }
+  | { type: "triage_form"; id: string; entry: ChatTriageForm };
 
 export interface ChatApiRequest {
   message: string;
@@ -131,6 +191,8 @@ export interface ChatApiResponse {
   }>;
   /** Present when the assistant handed back an intake form for the customer to fill in. */
   disputeForm?: DisputeForm | null;
+  /** Present when the assistant opened the unfamiliar-charge check. */
+  fraudTriage?: TriageForm | null;
   policyConfigVersion?: string;
 }
 

@@ -16,6 +16,7 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { DisputeCaseCard } from "@/components/chat/DisputeCaseCard";
 import { DisputeFormCard } from "@/components/chat/DisputeFormCard";
+import { TriageCard } from "@/components/chat/TriageCard";
 import {
     DayDivider,
     formatDayDivider,
@@ -39,6 +40,7 @@ import type {
     ChatSystemNotice,
     ChatTimelineItem,
     DisputeCase,
+    TriageResult,
 } from "@/types/chat";
 import { appendChatEntry } from "@/types/chat";
 
@@ -96,6 +98,9 @@ export default function ChatScreen() {
       } else if (entry.kind === "dispute_case") {
         flushMessages();
         items.push({ type: "dispute_case", id: entry.id, entry });
+      } else if (entry.kind === "triage_form") {
+        flushMessages();
+        items.push({ type: "triage_form", id: entry.id, entry });
       } else {
         flushMessages();
         items.push({ type: "system_notice", id: entry.id, notice: entry });
@@ -179,6 +184,16 @@ export default function ChatScreen() {
         setEntries((prev) => {
           const next = appendChatEntry(prev, assistantMessage);
           // The assistant hands back a server-built form; the customer fills it in.
+          if (response.fraudTriage) {
+            return [
+              ...next,
+              {
+                kind: "triage_form",
+                id: `triage_${response.fraudTriage.formId}`,
+                form: response.fraudTriage,
+              },
+            ];
+          }
           if (!response.disputeForm) return next;
           return [
             ...next,
@@ -249,6 +264,26 @@ export default function ChatScreen() {
     );
   }, []);
 
+  const handleTriageAnswered = useCallback(
+    (formEntryId: string, result: TriageResult) => {
+      setEntries((prev) => {
+        const withResult = prev.map((entry) =>
+          entry.kind === "triage_form" && entry.id === formEntryId
+            ? { ...entry, result }
+            : entry,
+        );
+        // A claim is a case like any other, so it gets the same status card.
+        if (!result.claim) return withResult;
+        return [
+          ...withResult,
+          { kind: "dispute_case", id: `case_${result.claim.id}`, case: result.claim },
+        ];
+      });
+      scrollToBottom();
+    },
+    [scrollToBottom],
+  );
+
   const renderTimelineItem = useCallback(
     ({ item }: { item: ChatTimelineItem }) => {
       if (item.type === "day") return <DayDivider label={item.label} />;
@@ -268,9 +303,19 @@ export default function ChatScreen() {
       if (item.type === "dispute_case") {
         return <DisputeCaseCard case={item.entry.case} onRefreshed={handleCaseRefreshed} />;
       }
+      if (item.type === "triage_form") {
+        return (
+          <TriageCard
+            form={item.entry.form}
+            result={item.entry.result}
+            onAnswered={(result) => handleTriageAnswered(item.entry.id, result)}
+            onAuthError={signOut}
+          />
+        );
+      }
       return <MessageGroup group={item.group} />;
     },
-    [handleCaseRefreshed, handleDisputeSubmitted, handleRetry, signOut],
+    [handleCaseRefreshed, handleDisputeSubmitted, handleRetry, handleTriageAnswered, signOut],
   );
 
   const showQuickActions = entries.filter((entry) => entry.kind === "message").length <= 1;

@@ -36,7 +36,32 @@ const STATUS_COPY: Record<DisputeStatus, { label: string; detail: string; tone: 
 
 export function DisputeCaseCard({ case: disputeCase, onRefreshed }: DisputeCaseCardProps) {
   const [refreshing, setRefreshing] = useState(false);
-  const status = STATUS_COPY[disputeCase.status] ?? STATUS_COPY.submitted;
+  const isFraud = disputeCase.claimType === "fraud";
+  const provisionalCents = disputeCase.provisionalCreditCents ?? 0;
+
+  // A temporary credit is not an outcome: it can be taken back. Say so instead
+  // of letting "Under review" imply the money is settled.
+  let status = STATUS_COPY[disputeCase.status] ?? STATUS_COPY.submitted;
+  if (disputeCase.status === "under_review" && provisionalCents > 0) {
+    status = {
+      label: "Temporary credit issued",
+      detail:
+        "The investigation is still open. This credit can be reversed if the charge turns out to be yours.",
+      tone: "text-chase-purple600",
+    };
+  } else if (disputeCase.status === "resolved" && disputeCase.provisionalCreditPermanent) {
+    status = {
+      label: "Resolved",
+      detail: "The investigation is finished and the credit is now permanent.",
+      tone: "text-chase-success",
+    };
+  } else if (disputeCase.status === "rejected" && disputeCase.provisionalCreditReversedTransactionId) {
+    status = {
+      label: "Not approved",
+      detail: "The charge was found to be yours, and the temporary credit has been taken back.",
+      tone: "text-chase-textSecondary",
+    };
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -58,7 +83,9 @@ export function DisputeCaseCard({ case: disputeCase, onRefreshed }: DisputeCaseC
     <Animated.View entering={FadeIn.duration(200)} className="px-4 py-2">
       <View className="rounded-2xl border border-chase-border bg-chase-card p-4">
         <View className="flex-row items-center justify-between">
-          <Text className="text-[15px] font-semibold text-chase-textPrimary">Dispute case</Text>
+          <Text className="text-[15px] font-semibold text-chase-textPrimary">
+            {isFraud ? "Fraud claim" : "Dispute case"}
+          </Text>
           <Pressable
             accessibilityLabel="Refresh case status"
             accessibilityRole="button"
@@ -87,7 +114,18 @@ export function DisputeCaseCard({ case: disputeCase, onRefreshed }: DisputeCaseC
           <Text className="mt-1 text-[12px] text-chase-textMuted">
             {disputeCase.transactionIds.length} charge
             {disputeCase.transactionIds.length === 1 ? "" : "s"} under review
+            {disputeCase.cardAction === "lock"
+              ? " · card blocked"
+              : disputeCase.cardAction === "replace"
+                ? " · card replaced"
+                : ""}
           </Text>
+          {provisionalCents > 0 && (
+            <Text className="mt-1 text-[12px] text-chase-textMuted">
+              Temporary credit of ${(provisionalCents / 100).toFixed(2)} posted while the bank
+              investigates.
+            </Text>
+          )}
           {disputeCase.reviewNote && (
             <Text className="mt-2 text-[12px] italic text-chase-textSecondary">
               Reviewer: {disputeCase.reviewNote}

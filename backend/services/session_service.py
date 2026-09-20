@@ -86,16 +86,19 @@ def session_for_firebase_token(id_token: str) -> Session:
     return session
 
 
-# With no Bearer token, a request falls back to the hardcoded demo sessions, so
-# /docs and the staff routes work while authentication is mocked. Set
-# REQUIRE_AUTH=1 in backend/.env to turn that off and demand a real token.
-REQUIRE_AUTH = os.environ.get("REQUIRE_AUTH", "").lower() in {"1", "true", "yes"}
+# A verified Firebase token is required by default. The X-Session-Id fallback is
+# a local development convenience — it lets /docs and scripts act as the demo
+# customer or a reviewer — and must be switched on deliberately with
+# ALLOW_DEMO_SESSIONS=1 in backend/.env. It is never set on a deployed instance:
+# without a token, anyone with the URL could read the customer's data and pass
+# X-Session-Id: demo_staff_session_01 to act as staff.
+ALLOW_DEMO_SESSIONS = os.environ.get("ALLOW_DEMO_SESSIONS", "").lower() in {"1", "true", "yes"}
 
 
 def resolve_session(authorization: str | None, x_session_id: str | None) -> Session:
-    """Pick the session for a request: Firebase token first, then an explicit id."""
+    """Pick the session for a request: a Firebase token, or a demo id in local dev."""
     if authorization and authorization.lower().startswith("bearer "):
         return session_for_firebase_token(authorization.split(" ", 1)[1].strip())
-    if REQUIRE_AUTH:
-        raise InvalidSession("Sign in to continue.")
-    return get_session(x_session_id)
+    if ALLOW_DEMO_SESSIONS:
+        return get_session(x_session_id)
+    raise InvalidSession("Sign in to continue.")

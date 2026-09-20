@@ -7,7 +7,7 @@ ran under, so a case can be reconstructed after the configuration changes.
 from dataclasses import dataclass
 
 # Bump this whenever the table below changes. Stored on every record the gate allows.
-CONFIG_VERSION = "2026-09-20.1"
+CONFIG_VERSION = "2026-09-20.2"
 
 
 class Tier:
@@ -28,6 +28,9 @@ class ActionPolicy:
 # service everywhere, including for the agent, without a code change elsewhere.
 ACTIONS: dict[str, ActionPolicy] = {
     "get_accounts": ActionPolicy(Tier.READ, True, False, "List the signed-in user's accounts"),
+    "get_transactions": ActionPolicy(
+        Tier.READ, True, False, "List the signed-in user's recent transactions"
+    ),
     "find_possible_duplicates": ActionPolicy(
         Tier.READ, True, False, "Surface candidate duplicate charges for review"
     ),

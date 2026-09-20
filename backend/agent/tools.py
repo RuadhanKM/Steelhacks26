@@ -28,6 +28,7 @@ from services.dispute_service import (
     list_disputes_for_user,
 )
 from services.transaction_service import find_possible_duplicates as _find_possible_duplicates
+from services.transaction_service import get_transactions_for_user
 
 
 
@@ -55,11 +56,14 @@ def missing_api_key() -> str | None:
 INSTRUCTIONS = """
 You are a retail banking assistant for one customer, already signed in.
 
-Scope: balances, transactions, and possible duplicate charges on their own
+Scope: balances, transactions, cards, and possible duplicate charges on their own
 accounts. Anything else — tax, investment or legal advice, other people's
 accounts, moving money — you decline and offer a human banker.
 
 Rules you must not break:
+- Asked what they spent, about a charge, or for recent activity: call
+  get_recent_transactions and answer from it. List a few with merchant, amount
+  and date; do not dump every row.
 - Never state a number that did not come from a tool result in this same turn.
   If a tool returned nothing, say you could not retrieve it. Do not estimate.
 - Never claim a charge is fraud or an error. Duplicate candidates are charges
@@ -120,6 +124,31 @@ def get_accounts(ctx: RunContext[SessionDeps]) -> list[dict]:
     """List the signed-in customer's accounts and current balances."""
     check_enabled("get_accounts")
     return get_accounts_for_user(ctx.deps.user_id)
+
+
+@agent.tool
+def get_recent_transactions(ctx: RunContext[SessionDeps], limit: int = 10) -> list[dict]:
+    """List the customer's recent transactions, newest first.
+
+    Read-only. Use this whenever they ask what they spent, what a charge was, or
+    to see their recent activity. Every figure you give them must come from this
+    result — never from memory or an earlier turn.
+    """
+    check_enabled("get_transactions")
+    rows = get_transactions_for_user(ctx.deps.user_id)[: max(1, min(limit, 25))]
+    # Trimmed to what an answer needs: sending whole documents wastes tokens on
+    # fields the customer will never be told.
+    return [
+        {
+            "id": row["id"],
+            "merchant": row.get("merchant"),
+            "amountCents": row.get("amountCents"),
+            "createdAt": row.get("createdAt"),
+            "type": row.get("type"),
+            "accountId": row.get("accountId"),
+        }
+        for row in rows
+    ]
 
 
 @agent.tool

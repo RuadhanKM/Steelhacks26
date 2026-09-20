@@ -63,8 +63,6 @@ joserfc==1.7.5
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 keyring==25.7.0
-logfire==5.1.0
-logfire-api==5.1.0
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 mcp==2.2.0
@@ -94,7 +92,6 @@ pyasn1==0.6.4
 pyasn1_modules==0.4.2
 pycparser==3.0
 pydantic==2.13.5
-pydantic-ai==2.46.0
 pydantic-ai-slim==2.46.0
 pydantic-evals==2.46.0
 pydantic-extra-types==2.11.1

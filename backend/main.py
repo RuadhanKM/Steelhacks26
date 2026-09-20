@@ -1,7 +1,6 @@
 import os
 import traceback
 
-import logfire
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,15 +8,6 @@ from fastapi.responses import JSONResponse
 
 # Load backend/.env before any module reads the provider API key at import time.
 load_dotenv()
-
-# Configure Logfire once, at startup, before the agent is imported. configure()
-# on its own sends nothing for an agent run — instrument_pydantic_ai() is what
-# records the model calls, tool calls and their arguments.
-logfire.configure(
-    service_name="banking-assistant",
-    environment=os.environ.get("ENVIRONMENT", "dev"),
-)
-logfire.instrument_pydantic_ai()
 
 from api.accounts import router as accounts_router
 from api.chat import router as chat_router
@@ -66,8 +56,6 @@ app.include_router(session_router)
 app.include_router(cards_router)
 app.include_router(fraud_router)
 
-# Request spans, so a slow or failing chat turn shows the HTTP call around it.
-logfire.instrument_fastapi(app)
 
 
 @app.get("/")

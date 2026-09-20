@@ -156,11 +156,13 @@ export default function ChatScreen() {
           };
 
       setEntries((prev) => {
-        const withoutNotices = prev.filter((entry) => entry.kind !== "system_notice");
-        if (withoutNotices.some((entry) => entry.id === userMessage.id)) {
-          return withoutNotices;
+        const filtered = prev.filter(
+          (entry) => entry.kind !== "system_notice" && entry.kind !== "suggestions",
+        );
+        if (filtered.some((entry) => entry.id === userMessage.id)) {
+          return filtered;
         }
-        return [...withoutNotices, userMessage];
+        return [...filtered, userMessage];
       });
       setDraft("");
       setIsTyping(true);

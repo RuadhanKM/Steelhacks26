@@ -34,6 +34,56 @@ export class ApiRequestError extends Error {
   }
 }
 
+let latestIdToken: string | null = null;
+
+export function setLatestIdToken(token: string | null) {
+  latestIdToken = token;
+}
+
+export async function getValidIdToken(user: any): Promise<string> {
+  const cachedFallback =
+    latestIdToken ||
+    user?.stsTokenManager?.accessToken ||
+    user?.accessToken ||
+    (typeof user?.toJSON === "function" ? (user.toJSON() as any)?.stsTokenManager?.accessToken : null);
+
+  // Race user.getIdToken(false) with a 2-second timeout to prevent React Native hanging indefinitely
+  try {
+    const tokenPromise = user.getIdToken(false);
+    const timeoutPromise = new Promise<string | null>((resolve) => {
+      setTimeout(() => resolve(null), 2000);
+    });
+    const token = await Promise.race([tokenPromise, timeoutPromise]);
+    if (token) {
+      latestIdToken = token;
+      return token;
+    }
+  } catch (err) {
+    console.warn("[apiClient] user.getIdToken() error:", err);
+  }
+
+  // Fall back to immediate cached token if getIdToken timed out or hung
+  if (cachedFallback) {
+    return cachedFallback;
+  }
+
+  // Last attempt: race force-refresh for 2 seconds
+  try {
+    const token = await Promise.race([
+      user.getIdToken(true),
+      new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]);
+    if (token) {
+      latestIdToken = token;
+      return token;
+    }
+  } catch (err) {
+    console.warn("[apiClient] forced getIdToken error:", err);
+  }
+
+  throw new ChatRequestError("offline", "Could not obtain an authentication token. Please sign in again.");
+}
+
 /**
  * Calls the backend with the signed-in user's Firebase ID token.
  *
@@ -47,19 +97,16 @@ export async function authorizedFetch(
   const user = firebaseAuth?.currentUser;
   if (!user) throw new AuthenticationError();
 
-  let idToken: string;
-  try {
-    idToken = await user.getIdToken();
-  } catch {
-    throw new ChatRequestError("offline");
-  }
+  const idToken = await getValidIdToken(user);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
 
   let response: Response;
+  const fullUrl = getApiUrl(path);
+
   try {
-    response = await fetch(getApiUrl(path), {
+    response = await fetch(fullUrl, {
       method: init.method ?? "GET",
       headers: {
         "Content-Type": "application/json",
@@ -68,8 +115,9 @@ export async function authorizedFetch(
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
     clearTimeout(timeoutId);
+    console.warn(`[apiClient] Network request failed for ${fullUrl}:`, err);
     throw new ChatRequestError("offline");
   }
 

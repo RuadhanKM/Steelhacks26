@@ -2,12 +2,14 @@ import {
     createUserWithEmailAndPassword,
     signOut as firebaseSignOut,
     onAuthStateChanged,
+    onIdTokenChanged,
     signInWithEmailAndPassword,
     type User,
 } from '@/config/firebase-auth';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { firebaseAuth, isFirebaseConfigured } from '@/config/firebase';
+import { setLatestIdToken } from '@/services/apiClient';
 
 interface AuthContextValue {
   user: User | null;
@@ -65,10 +67,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    return onAuthStateChanged(firebaseAuth, (nextUser) => {
+    const unsubscribeAuth = onAuthStateChanged(firebaseAuth, (nextUser) => {
       setUser(nextUser);
       setLoading(false);
     });
+
+    const unsubscribeToken = onIdTokenChanged(firebaseAuth, async (nextUser) => {
+      if (nextUser) {
+        try {
+          const token = await Promise.race([
+            nextUser.getIdToken(false),
+            new Promise<string | null>((res) => setTimeout(() => res(null), 2000)),
+          ]);
+          if (token) {
+            setLatestIdToken(token);
+            return;
+          }
+        } catch {
+          // ignore error
+        }
+        const fallback = (nextUser as any)?.stsTokenManager?.accessToken;
+        if (fallback) setLatestIdToken(fallback);
+      } else {
+        setLatestIdToken(null);
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeToken();
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -80,7 +108,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!firebaseAuth) throw new Error('Firebase authentication is not configured.');
         setError(null);
         try {
-          await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+          const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+          const token = (cred.user as any)?.stsTokenManager?.accessToken;
+          if (token) setLatestIdToken(token);
         } catch (authError) {
           const message = getAuthErrorMessage(authError);
           setError(message);
@@ -91,7 +121,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!firebaseAuth) throw new Error('Firebase authentication is not configured.');
         setError(null);
         try {
-          await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+          const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+          const token = (cred.user as any)?.stsTokenManager?.accessToken;
+          if (token) setLatestIdToken(token);
         } catch (authError) {
           const message = getAuthErrorMessage(authError);
           setError(message);
@@ -99,6 +131,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       },
       signOut: async () => {
+        setLatestIdToken(null);
         if (firebaseAuth) await firebaseSignOut(firebaseAuth);
       },
       clearError: () => setError(null),

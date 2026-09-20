@@ -35,7 +35,7 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     try {
       await signIn(normalizedEmail, password);
-      router.replace('/');
+      router.replace('/chat');
     } catch {
       // AuthContext exposes the user-facing error.
     } finally {

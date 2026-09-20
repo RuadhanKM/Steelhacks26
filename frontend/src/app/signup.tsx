@@ -40,7 +40,7 @@ export default function SignupScreen() {
     setIsSubmitting(true);
     try {
       await signUp(normalizedEmail, password);
-      router.replace('/');
+      router.replace('/chat');
     } catch {
       // AuthContext exposes the user-facing error.
     } finally {

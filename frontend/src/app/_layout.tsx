@@ -1,6 +1,6 @@
 import "@/global.css";
 
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, usePathname, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
@@ -13,17 +13,24 @@ function AuthGate() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (loading) return;
 
+    // "/" is the landing page and is public. Typed routes give useSegments() no
+    // entry for the index route, so the path is the reliable check.
+    const onLanding = pathname === "/";
     const inAuthFlow = segments[0] === "login" || segments[0] === "signup";
-    if (!user && !inAuthFlow) {
+    const isPublic = onLanding || inAuthFlow;
+
+    if (!user && !isPublic) {
       router.replace("/login");
-    } else if (user && inAuthFlow) {
-      router.replace("/");
+    } else if (user && isPublic) {
+      // Signed in, so the hero and the sign-in forms have nothing to offer.
+      router.replace("/chat");
     }
-  }, [loading, router, segments, user]);
+  }, [loading, pathname, router, segments, user]);
 
   if (loading) {
     return (

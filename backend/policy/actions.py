@@ -7,7 +7,7 @@ ran under, so a case can be reconstructed after the configuration changes.
 from dataclasses import dataclass
 
 # Bump this whenever the table below changes. Stored on every record the gate allows.
-CONFIG_VERSION = "2026-09-20.2"
+CONFIG_VERSION = "2026-09-20.3"
 
 
 class Tier:
@@ -47,6 +47,14 @@ ACTIONS: dict[str, ActionPolicy] = {
         Tier.IRREVERSIBLE_WRITE, True, True, "Staff approval or rejection of a dispute case"
     ),
     "get_cards": ActionPolicy(Tier.READ, True, False, "List the customer's own cards"),
+    # A waiver request costs nothing until staff decide, but the customer is
+    # asking the bank to give money back, so the request itself is confirmed.
+    "start_fee_waiver_form": ActionPolicy(
+        Tier.REVERSIBLE_WRITE, True, False, "Issue the fee waiver request form"
+    ),
+    "request_fee_waiver": ActionPolicy(
+        Tier.IRREVERSIBLE_WRITE, True, True, "Ask the bank to refund a fee it charged"
+    ),
     # Triage asks whether the customer recognises a charge before anything is
     # locked or claimed. It only issues a form, so it is not a money action.
     "start_fraud_triage": ActionPolicy(

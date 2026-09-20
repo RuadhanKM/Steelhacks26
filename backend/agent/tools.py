@@ -18,6 +18,7 @@ from pydantic_ai import Agent, RunContext
 from policy.actions import check_enabled
 from services.account_service import get_accounts_for_user
 from services.card_service import get_cards_for_user
+from services.fee_service import FeeWaiverError, build_fee_waiver_form
 from services.fraud_service import TriageError, build_triage_form
 from services.dispute_form_service import FormError, build_dispute_form
 from services.dispute_service import (
@@ -80,6 +81,11 @@ Rules you must not break:
   called it earlier in this conversation. Never say a form is "already open" and
   never describe what is on it: only a form you opened in this turn is on their
   screen. If they say they cannot see it, call the tool again.
+- Only open a form when this message raises the problem. Asking how a case is
+  going, what a fee was, whether they will be refunded, or anything about a form
+  already on screen is a question to answer — not a reason to open another form.
+  When you have answered one thing and they move on to something else, answer
+  the new thing; do not re-open the previous form.
 - You cannot open a dispute yourself. The customer submits the form and the app
   opens the case.
 - If a tool says charges are already in a case, or start_dispute_form returns an
@@ -90,6 +96,9 @@ Rules you must not break:
   start_dispute_form. Do not say the charge is fraud. A merchant may bill under
   another name, and someone with access to the card may have used it — the form
   asks that first.
+- A fee the bank charged (overdraft, monthly maintenance, late payment) that
+  they want refunded or waived: call start_fee_waiver_form. It is a request a
+  banker decides on — never say the fee will be refunded, waived or removed.
 - Never promise a refund, a reversal, or that they will get their money back.
   The bank investigates first. A temporary credit may be issued during the
   investigation and can be taken back. Say that plainly if they ask.
@@ -223,6 +232,23 @@ def start_fraud_triage(ctx: RunContext[SessionDeps], transaction_id: str | None 
     try:
         return build_triage_form(ctx.deps.user_id, transaction_id)
     except TriageError as exc:
+        return {"error": str(exc)}
+
+
+@agent.tool
+def start_fee_waiver_form(ctx: RunContext[SessionDeps]) -> dict:
+    """Open the form for asking the bank to refund a fee it charged.
+
+    Use this for overdraft, monthly maintenance and late payment fees — the
+    bank's own charges — not for anything a merchant charged. The form lists the
+    fees they actually paid and asks why they are asking.
+
+    You cannot waive a fee, and you must not say one will be refunded: a banker
+    reviews the request and decides. Say that plainly.
+    """
+    try:
+        return build_fee_waiver_form(ctx.deps.user_id)
+    except FeeWaiverError as exc:
         return {"error": str(exc)}
 
 

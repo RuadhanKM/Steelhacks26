@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CreditCard,
   HandCoins,
+  Receipt,
   Loader2,
   RefreshCw,
   ShieldAlert,
@@ -20,6 +21,7 @@ import {
   approveDispute,
   CARD_ACTION_LABELS,
   claimDispute,
+  FEE_WAIVER_REASON_LABELS,
   formatAmount,
   formatDateTime,
   getPendingDisputes,
@@ -74,6 +76,7 @@ function CaseCard({
   const [current, setCurrent] = useState<DisputeCase>(dispute);
 
   const isFraud = current.claimType === "fraud";
+  const isFeeWaiver = current.claimType === "fee_waiver";
   const provisionalCents = current.provisionalCreditCents ?? 0;
 
   const credit = async () => {
@@ -130,6 +133,12 @@ function CaseCard({
               <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600">
                 <ShieldAlert className="h-3 w-3" />
                 Fraud claim
+              </span>
+            )}
+            {isFeeWaiver && (
+              <span className="flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-600">
+                <Receipt className="h-3 w-3" />
+                Fee refund request
               </span>
             )}
           </div>
@@ -198,6 +207,27 @@ function CaseCard({
             </div>
           </>
         )}
+        {isFeeWaiver && (
+          <>
+            <div>
+              <dt className="text-muted-foreground">Customer says</dt>
+              <dd className="mt-0.5 text-foreground">
+                {FEE_WAIVER_REASON_LABELS[current.feeWaiverReason ?? ""] ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Waivers in the last year</dt>
+              <dd className="mt-0.5 text-foreground">
+                {current.waiversGrantedLastYear ?? 0}
+                {current.withinCourtesyPolicy === false ? (
+                  <span className="ml-1.5 text-amber-600">· above the usual courtesy</span>
+                ) : (
+                  <span className="ml-1.5 text-muted-foreground">· within courtesy</span>
+                )}
+              </dd>
+            </div>
+          </>
+        )}
         {provisionalCents > 0 && (
           <div className="col-span-2">
             <dt className="text-muted-foreground">Temporary credit</dt>
@@ -237,7 +267,9 @@ function CaseCard({
           <p className="text-xs text-muted-foreground">
             {provisionalCents > 0
               ? "Approving makes the temporary credit permanent. Rejecting takes it back."
-              : "Approving posts a credit and updates the balance together."}
+              : isFeeWaiver
+                ? "Approving refunds the fee and updates the balance together."
+                : "Approving posts a credit and updates the balance together."}
           </p>
           <div className="flex gap-2">
             {isFraud && provisionalCents === 0 && (

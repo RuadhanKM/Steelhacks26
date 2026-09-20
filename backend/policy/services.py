@@ -54,9 +54,21 @@ SERVICES: tuple[Service, ...] = (
         prompt="I need to do something about my card",
     ),
     Service(
+        id="fee_waiver",
+        label="Ask about a fee",
+        description=(
+            "a fee the bank charged them - overdraft, monthly maintenance or late payment - "
+            "including asking for it to be refunded, waived or removed"
+        ),
+        prompt="Can you waive the overdraft fee I was charged?",
+    ),
+    Service(
         id="case_status",
         label="Check a case",
-        description="the status of a dispute or fraud claim they already opened",
+        description=(
+            "the status of a dispute, fraud claim or fee request they already opened, or a "
+            "question about a form, case or request already on their screen"
+        ),
         prompt="What's the status of my dispute?",
     ),
 )

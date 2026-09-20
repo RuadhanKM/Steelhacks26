@@ -91,6 +91,9 @@ export interface DisputeCase {
   provisionalCreditTransactionId?: string | null;
   provisionalCreditPermanent?: boolean | null;
   provisionalCreditReversedTransactionId?: string | null;
+  feeWaiverReason?: string | null;
+  waiversGrantedLastYear?: number | null;
+  withinCourtesyPolicy?: boolean | null;
 }
 
 export const getSessionInfo = () => request<SessionInfo>("/session");
@@ -142,6 +145,15 @@ export const REASON_LABELS: Record<string, string> = {
   unauthorized: "Not authorised",
   wrong_amount: "Wrong amount",
   goods_not_received: "Goods not received",
+  fee_waiver: "Asking us to refund a fee",
+};
+
+export const FEE_WAIVER_REASON_LABELS: Record<string, string> = {
+  first_time: "First time it has happened",
+  deposit_timing: "A deposit had not landed yet",
+  bank_error: "Believes the fee was charged in error",
+  hardship: "Financial hardship",
+  long_standing: "Long-standing customer",
 };
 
 export const CARD_ACTION_LABELS: Record<string, string> = {

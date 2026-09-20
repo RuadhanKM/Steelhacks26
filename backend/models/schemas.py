@@ -95,6 +95,28 @@ class TriageForm(BaseModel):
     fields: list[FormField]
 
 
+class FeeWaiverForm(BaseModel):
+    """Asking the bank to refund its own fee. A request, never a promise."""
+
+    formId: str
+    title: str
+    description: str
+    decisionNotice: str
+    waiversGrantedLastYear: int
+    courtesyPerYear: int
+    expiresAt: str
+    policyConfigVersion: str
+    fields: list[FormField]
+
+
+class FeeWaiverRequest(BaseModel):
+    formId: str
+    transactionId: str
+    reasonCode: str
+    note: str | None = None
+    confirmed: bool = False
+
+
 class ToolTraceOut(BaseModel):
     """One tool call the app can show the customer, so the answer is traceable."""
 
@@ -119,6 +141,8 @@ class ChatResponse(BaseModel):
     disputeForm: DisputeForm | None = None
     # "Did you make this?" — asked before a card is blocked or a claim opened.
     fraudTriage: TriageForm | None = None
+    # Asking the bank to refund a fee it charged.
+    feeWaiver: FeeWaiverForm | None = None
     pendingConfirmation: PendingConfirmation | None = None
     toolsUsed: list[str] = Field(default_factory=list)
     sourcedFrom: list[str] = Field(default_factory=list)
@@ -206,6 +230,9 @@ class DisputeResponse(BaseModel):
     provisionalCreditTransactionId: str | None = None
     provisionalCreditPermanent: bool | None = None
     provisionalCreditReversedTransactionId: str | None = None
+    feeWaiverReason: str | None = None
+    waiversGrantedLastYear: int | None = None
+    withinCourtesyPolicy: bool | None = None
 
 
 class ReviewRequest(BaseModel):

@@ -16,6 +16,7 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { DisputeCaseCard } from "@/components/chat/DisputeCaseCard";
 import { DisputeFormCard } from "@/components/chat/DisputeFormCard";
+import { FeeWaiverCard } from "@/components/chat/FeeWaiverCard";
 import { SuggestionChips } from "@/components/chat/SuggestionChips";
 import { TriageCard } from "@/components/chat/TriageCard";
 import {
@@ -101,6 +102,9 @@ export default function ChatScreen() {
       } else if (entry.kind === "triage_form") {
         flushMessages();
         items.push({ type: "triage_form", id: entry.id, entry });
+      } else if (entry.kind === "fee_waiver_form") {
+        flushMessages();
+        items.push({ type: "fee_waiver_form", id: entry.id, entry });
       } else if (entry.kind === "suggestions") {
         flushMessages();
         items.push({ type: "suggestions", id: entry.id, entry });
@@ -199,6 +203,16 @@ export default function ChatScreen() {
               },
             ];
           }
+          if (response.feeWaiver) {
+            return [
+              ...next,
+              {
+                kind: "fee_waiver_form",
+                id: `fee_${response.feeWaiver.formId}`,
+                form: response.feeWaiver,
+              },
+            ];
+          }
           if (response.suggestions.length > 0) {
             return [
               ...next,
@@ -259,8 +273,11 @@ export default function ChatScreen() {
 
   const handleDisputeSubmitted = useCallback((formEntryId: string, opened: DisputeCase) => {
     setEntries((prev) => [
+      // Both the dispute form and the fee waiver form open a case, and both
+      // lock once submitted.
       ...prev.map((entry) =>
-        entry.kind === "dispute_form" && entry.id === formEntryId
+        (entry.kind === "dispute_form" || entry.kind === "fee_waiver_form") &&
+        entry.id === formEntryId
           ? { ...entry, submittedCaseId: opened.id }
           : entry,
       ),
@@ -317,6 +334,16 @@ export default function ChatScreen() {
       }
       if (item.type === "dispute_case") {
         return <DisputeCaseCard case={item.entry.case} onRefreshed={handleCaseRefreshed} />;
+      }
+      if (item.type === "fee_waiver_form") {
+        return (
+          <FeeWaiverCard
+            form={item.entry.form}
+            submittedCaseId={item.entry.submittedCaseId}
+            onSubmitted={(opened) => handleDisputeSubmitted(item.entry.id, opened)}
+            onAuthError={signOut}
+          />
+        );
       }
       if (item.type === "suggestions") {
         return (

@@ -37,6 +37,7 @@ const STATUS_COPY: Record<DisputeStatus, { label: string; detail: string; tone: 
 export function DisputeCaseCard({ case: disputeCase, onRefreshed }: DisputeCaseCardProps) {
   const [refreshing, setRefreshing] = useState(false);
   const isFraud = disputeCase.claimType === "fraud";
+  const isFeeWaiver = disputeCase.claimType === "fee_waiver";
   const provisionalCents = disputeCase.provisionalCreditCents ?? 0;
 
   // A temporary credit is not an outcome: it can be taken back. Say so instead
@@ -98,7 +99,7 @@ export function DisputeCaseCard({ case: disputeCase, onRefreshed }: DisputeCaseC
         <View className="p-4">
           <View className="flex-row items-center justify-between">
             <Text className="text-[15px] font-semibold text-chase-textPrimary">
-              {isFraud ? "Fraud claim" : "Dispute case"}
+              {isFraud ? "Fraud claim" : isFeeWaiver ? "Fee refund request" : "Dispute case"}
             </Text>
             <Pressable
               accessibilityLabel="Refresh case status"

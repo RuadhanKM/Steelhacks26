@@ -23,13 +23,15 @@ from models.schemas import (
     DisputeForm,
     DuplicateCandidate,
     PendingConfirmation,
+    FeeWaiverForm,
     ToolTraceOut,
     TriageForm,
 )
 from policy.actions import CONFIG_VERSION, ActionNotAllowed, requires_confirmation
-from policy.services import REPLIES, suggestions
+from policy.services import REPLIES, UNCLEAR, suggestions
 from services.dispute_form_service import FormError, build_dispute_form
 from services.dispute_service import disputable_duplicates
+from services.fee_service import FeeWaiverError, build_fee_waiver_form
 from services.fraud_service import TriageError, build_triage_form
 from services.session_service import Session
 
@@ -135,6 +137,26 @@ def _claims_duplicate(message: str) -> bool:
     return any(phrase in lowered for phrase in DUPLICATE_CLAIM)
 
 
+FEE_WAIVER_INTENT = (
+    "waive",
+    "waiver",
+    "overdraft fee",
+    "maintenance fee",
+    "late payment fee",
+    "late fee",
+    "service fee",
+    "fee back",
+    "refund the fee",
+    "refund this fee",
+    "remove the fee",
+)
+
+
+def _asks_fee_waiver(message: str) -> bool:
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in FEE_WAIVER_INTENT)
+
+
 def _suspects_fraud(message: str) -> bool:
     lowered = message.lower()
     return any(phrase in lowered for phrase in FRAUD_INTENT)
@@ -168,7 +190,16 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
     # Classify before waking the main agent. A greeting or an off-topic question
     # is answered from a fixed list here, for a fraction of a full turn.
     route, decided_by = classify(request.message)
-    if not is_in_scope(route, decided_by):
+
+    # "unclear" means the router could not tell from one message alone. Mid
+    # conversation that is usually a follow-up — "will I get a refund for that?"
+    # — and the agent has the context to answer it. Sending those to the canned
+    # reply would answer a real question with a menu.
+    follow_up = route == UNCLEAR and bool(session.history)
+    if follow_up:
+        decided_by = f"{decided_by}:follow_up"
+
+    if not follow_up and not is_in_scope(route, decided_by):
         return ChatResponse(
             message=REPLIES[route],
             sessionId=session.session_id,
@@ -203,7 +234,10 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
     candidates: list[DuplicateCandidate] = []
     dispute_form: DisputeForm | None = None
     triage_form: TriageForm | None = None
+    fee_form: FeeWaiverForm | None = None
     for tool_name, content in tool_results:
+        if tool_name == "start_fee_waiver_form" and isinstance(content, dict) and "formId" in content:
+            fee_form = FeeWaiverForm(**content)
         if tool_name == "start_fraud_triage" and isinstance(content, dict) and "formId" in content:
             triage_form = TriageForm(**content)
         if tool_name == "find_possible_duplicates" and isinstance(content, list):
@@ -211,19 +245,25 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
         elif tool_name == "start_dispute_form" and isinstance(content, dict) and "formId" in content:
             dispute_form = DisputeForm(**content)
 
-    # The model sometimes talks about the form without calling the tool — most
-    # often when an earlier turn already issued one. The customer would see a
-    # sentence about a form that is not on screen, so the server issues it.
-    # Its own reply mentioning a form counts: that promise has to be kept.
+    # Safety net: the router says this turn is asking for one of these flows, but
+    # the model did not open the form. Keyed on the route, never on words found
+    # in the message or the reply — "the status of my dispute" or a reply saying
+    # "use the form above" must not conjure a second form.
     # A disowned charge goes to triage, not to the dispute form: the customer is
     # asked whether they made the purchase before anything is blocked.
-    if triage_form is None and dispute_form is None and _suspects_fraud(request.message):
+    if triage_form is None and dispute_form is None and route == "unauthorised_charge":
         try:
             triage_form = TriageForm(**build_triage_form(session.user_id))
         except (TriageError, ActionNotAllowed):
             triage_form = None
 
-    mentions_form = "form" in (result.output or "").lower()
+    # A fee the bank charged is a waiver request, not a dispute.
+    if fee_form is None and triage_form is None and dispute_form is None and route == "fee_waiver":
+        try:
+            fee_form = FeeWaiverForm(**build_fee_waiver_form(session.user_id))
+        except (FeeWaiverError, ActionNotAllowed):
+            fee_form = None
+
     # A double-charge claim with no matching pair gets an answer, not a form.
     duplicate_claim_without_pair = _claims_duplicate(request.message) and not disputable_duplicates(
         session.user_id
@@ -231,8 +271,9 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
     if (
         dispute_form is None
         and triage_form is None
+        and fee_form is None
         and not duplicate_claim_without_pair
-        and (_wants_dispute(request.message) or mentions_form)
+        and route == "duplicate_charge"
     ):
         try:
             dispute_form = DisputeForm(**build_dispute_form(session.user_id))
@@ -268,6 +309,7 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
         duplicateCandidates=candidates,
         disputeForm=dispute_form,
         fraudTriage=triage_form,
+        feeWaiver=fee_form,
         pendingConfirmation=pending,
         toolsUsed=tool_names,
         # Provenance for the app: which services this turn's figures came from.

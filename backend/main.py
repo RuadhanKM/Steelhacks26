@@ -14,6 +14,7 @@ from api.chat import router as chat_router
 from api.dispute_review import router as dispute_review_router
 from api.cards import router as cards_router
 from api.disputes import router as disputes_router
+from api.fees import router as fees_router
 from api.fraud import router as fraud_router
 from api.session import router as session_router
 
@@ -55,6 +56,7 @@ app.include_router(dispute_review_router)
 app.include_router(session_router)
 app.include_router(cards_router)
 app.include_router(fraud_router)
+app.include_router(fees_router)
 
 
 

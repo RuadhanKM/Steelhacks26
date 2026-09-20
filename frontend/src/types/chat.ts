@@ -87,6 +87,22 @@ export interface TriageForm {
   fields: DisputeFormField[];
 }
 
+/**
+ * Asking the bank to refund its own fee. A request a banker decides on — the
+ * wording of that promise lives on the server, in `decisionNotice`.
+ */
+export interface FeeWaiverForm {
+  formId: string;
+  title: string;
+  description: string;
+  decisionNotice: string;
+  waiversGrantedLastYear: number;
+  courtesyPerYear: number;
+  expiresAt: string;
+  policyConfigVersion: string;
+  fields: DisputeFormField[];
+}
+
 export type CardStatus = "active" | "locked" | "cancelled";
 
 export interface Card {
@@ -121,6 +137,10 @@ export interface DisputeCase {
   reviewNote?: string | null;
   reversalAmountCents?: number | null;
   createdAt?: string | null;
+  /** Fee waivers carry why it was asked for, and the courtesy context. */
+  feeWaiverReason?: string | null;
+  waiversGrantedLastYear?: number | null;
+  withinCourtesyPolicy?: boolean | null;
   /** Fraud claims carry what happened to the card and any temporary credit. */
   claimType?: string | null;
   cardAction?: string | null;
@@ -155,6 +175,13 @@ export interface ChatSuggestions {
   suggestions: ChatSuggestion[];
 }
 
+export interface ChatFeeWaiverForm {
+  kind: "fee_waiver_form";
+  id: string;
+  form: FeeWaiverForm;
+  submittedCaseId?: string;
+}
+
 export interface ChatTriageForm {
   kind: "triage_form";
   id: string;
@@ -168,6 +195,7 @@ export type ChatEntry =
   | ChatDisputeForm
   | ChatDisputeCase
   | ChatTriageForm
+  | ChatFeeWaiverForm
   | ChatSuggestions;
 
 export interface ChatMessageGroup {
@@ -185,7 +213,8 @@ export type ChatTimelineItem =
   | { type: "dispute_form"; id: string; entry: ChatDisputeForm }
   | { type: "dispute_case"; id: string; entry: ChatDisputeCase }
   | { type: "triage_form"; id: string; entry: ChatTriageForm }
-  | { type: "suggestions"; id: string; entry: ChatSuggestions };
+  | { type: "suggestions"; id: string; entry: ChatSuggestions }
+  | { type: "fee_waiver_form"; id: string; entry: ChatFeeWaiverForm };
 
 export interface ChatApiRequest {
   message: string;
@@ -207,6 +236,8 @@ export interface ChatApiResponse {
   disputeForm?: DisputeForm | null;
   /** Present when the assistant opened the unfamiliar-charge check. */
   fraudTriage?: TriageForm | null;
+  /** Present when the assistant opened the fee refund request. */
+  feeWaiver?: FeeWaiverForm | null;
   /** Offered when the message was off-topic or unclear. */
   suggestions?: ChatSuggestion[];
   routedAs?: string | null;

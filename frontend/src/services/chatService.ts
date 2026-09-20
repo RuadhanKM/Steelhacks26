@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ChatSuggestion,
   DisputeForm,
+  FeeWaiverForm,
   ToolTrace,
   TriageForm,
 } from "@/types/chat";
@@ -23,6 +24,7 @@ export interface ChatReply {
   toolTraces: ToolTrace[];
   disputeForm: DisputeForm | null;
   fraudTriage: TriageForm | null;
+  feeWaiver: FeeWaiverForm | null;
   suggestions: ChatSuggestion[];
 }
 
@@ -56,6 +58,7 @@ export async function sendMessage(
     })),
     disputeForm: data.disputeForm ?? null,
     fraudTriage: data.fraudTriage ?? null,
+    feeWaiver: data.feeWaiver ?? null,
     suggestions: data.suggestions ?? [],
   };
 }

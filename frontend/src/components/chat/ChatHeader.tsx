@@ -13,7 +13,7 @@ export function ChatHeader({ onSignOut }: Readonly<{ onSignOut: () => void }>) {
         {/* Title & Status */}
         <View className="flex-1">
           <Text className="text-lg font-semibold text-chase-textPrimary">
-            Bank Assistant
+            Pyre
           </Text>
           <View className="flex-row items-center mt-0.5">
             <View className="w-2 h-2 rounded-full bg-chase-success mr-1.5" />

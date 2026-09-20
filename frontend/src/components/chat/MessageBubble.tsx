@@ -145,7 +145,7 @@ export function MessageGroup({ group }: { readonly group: ChatMessageGroup }) {
     <View className={`mb-5 flex px-4 ${isUser ? "items-end" : "items-start"}`}>
       {!isUser && (
         <Text className="mb-1.5 mt-1.5 text-[12px] font-semibold text-chase-textMuted">
-          Assistant
+          Pyre
         </Text>
       )}
       <View className="w-full gap-1">

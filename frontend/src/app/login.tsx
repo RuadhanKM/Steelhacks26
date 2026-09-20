@@ -78,7 +78,7 @@ export default function LoginScreen() {
           >
             <Text className="text-3xl font-bold text-chase-textPrimary">Welcome back</Text>
             <Text className="mt-2 text-base text-chase-textSecondary">
-              Sign in to securely access your banking assistant.
+              Sign in to securely access Pyre.
             </Text>
 
             <TextInput

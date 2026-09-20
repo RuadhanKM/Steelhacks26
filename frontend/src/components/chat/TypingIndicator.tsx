@@ -42,7 +42,7 @@ export function TypingIndicator() {
   return (
     <View className="mb-5 flex items-start px-4">
       <Text className="mb-1.5 mt-1.5 text-[12px] font-semibold text-chase-textMuted">
-        Assistant
+        Pyre
       </Text>
       <Animated.View
         entering={FadeIn.duration(180)}

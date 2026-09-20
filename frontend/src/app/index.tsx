@@ -29,7 +29,7 @@ export default function LandingScreen() {
 
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom", "left", "right"]}>
         <View style={styles.header}>
-          <AppLogo size={32} variant="white" />
+          <AppLogo size={42} variant="white" />
         </View>
 
         <View style={styles.pitch}>
@@ -44,7 +44,7 @@ export default function LandingScreen() {
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/login")}
-            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            style={styles.button}
           >
             <Text style={styles.buttonLabel}>Sign in</Text>
           </Pressable>
@@ -59,10 +59,6 @@ export default function LandingScreen() {
               New here? <Text style={styles.linkStrong}>Create an account</Text>
             </Text>
           </Pressable>
-
-          <Text style={styles.disclaimer}>
-            A demo built on synthetic accounts. No real banking data.
-          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -87,13 +83,13 @@ const styles = StyleSheet.create({
     height: 0,
     borderRightColor: "transparent",
     borderBottomColor: "#FFFFFF",
-    borderBottomWidth: 70,
+    borderBottomWidth: 60,
     borderStyle: "solid",
   },
   // Tall enough to hold the actions row and no taller, so the pitch above it
   // stays on the purple where its light text is readable.
   block: {
-    height: 180,
+    height: 260,
     backgroundColor: "#FFFFFF",
   },
   safeArea: {

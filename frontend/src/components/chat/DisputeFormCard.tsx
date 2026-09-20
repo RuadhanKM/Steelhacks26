@@ -192,8 +192,8 @@ export function DisputeFormCard({
 
   return (
     <Animated.View
-      entering={FadeIn.duration(220)}
-      layout={LinearTransition.springify().damping(20)}
+      entering={FadeIn.duration(200)}
+      layout={LinearTransition.duration(180)}
       className="px-4 py-2"
     >
       <View className="overflow-hidden rounded-2xl border border-chase-border bg-chase-card">

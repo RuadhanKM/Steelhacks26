@@ -18,6 +18,7 @@ export function ChatInputBar({
   const handleSend = () => {
     const trimmed = value.trim();
     if (trimmed.length === 0 || disabled) return;
+    onChangeText("");
     onSend(trimmed);
   };
 

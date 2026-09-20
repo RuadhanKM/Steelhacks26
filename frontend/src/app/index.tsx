@@ -10,7 +10,6 @@ import {
     Pressable,
     View,
 } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -155,6 +154,7 @@ export default function ChatScreen() {
         }
         return [...withoutNotices, userMessage];
       });
+      setDraft("");
       setIsTyping(true);
       scrollToBottom();
 
@@ -276,8 +276,7 @@ export default function ChatScreen() {
   const showQuickActions = entries.filter((entry) => entry.kind === "message").length <= 1;
 
   return (
-    <Animated.View
-      entering={FadeInDown.duration(420).springify().damping(22)}
+    <View
       className="flex-1"
       style={{ flex: 1, width: "100%", minHeight: "100%" }}
     >
@@ -337,6 +336,6 @@ export default function ChatScreen() {
         </SafeAreaView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </Animated.View>
+    </View>
   );
 }

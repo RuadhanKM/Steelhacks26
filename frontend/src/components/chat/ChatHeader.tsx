@@ -1,12 +1,13 @@
 import { Pressable, Text, View } from "react-native";
+import { AppLogo } from "@/components/ui/AppLogo";
 
 export function ChatHeader({ onSignOut }: Readonly<{ onSignOut: () => void }>) {
   return (
     <View className="bg-white border-b border-chase-border px-5 pt-2 pb-3">
       <View className="flex-row items-center">
         {/* Bank Logo / Icon */}
-        <View className="w-10 h-10 rounded-full bg-chase-blue items-center justify-center mr-3">
-          <Text className="text-white text-lg font-bold">B</Text>
+        <View className="mr-3 items-center justify-center">
+          <AppLogo size={30} />
         </View>
 
         {/* Title & Status */}

@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { Text, View } from "react-native";
 import Animated, {
-    FadeInLeft,
-    useAnimatedStyle,
-    useSharedValue,
-    withDelay,
-    withRepeat,
-    withSequence,
-    withTiming,
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
 } from "react-native-reanimated";
 
 export function TypingIndicator() {
@@ -45,20 +45,20 @@ export function TypingIndicator() {
         Assistant
       </Text>
       <Animated.View
-        entering={FadeInLeft.duration(220).springify().damping(18)}
-        className="rounded-[14px] rounded-bl-[4px] border border-chase-border bg-white px-[14px] py-3"
+        entering={FadeIn.duration(180)}
+        className="flex-row items-center gap-1.5 rounded-[14px] rounded-bl-[4px] border border-chase-border bg-white px-4 py-3"
       >
         <Animated.View
           style={dotStyle1}
-          className="w-2.5 h-2.5 rounded-full bg-chase-blue"
+          className="w-2 h-2 rounded-full bg-chase-purple600"
         />
         <Animated.View
           style={dotStyle2}
-          className="w-2.5 h-2.5 rounded-full bg-chase-blue"
+          className="w-2 h-2 rounded-full bg-chase-purple600"
         />
         <Animated.View
           style={dotStyle3}
-          className="w-2.5 h-2.5 rounded-full bg-chase-blue"
+          className="w-2 h-2 rounded-full bg-chase-purple600"
         />
       </Animated.View>
     </View>

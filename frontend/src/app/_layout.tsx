@@ -3,7 +3,7 @@ import "@/global.css";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 
@@ -37,8 +37,8 @@ function AuthGate() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: "fade_from_bottom",
-        animationDuration: 420,
+        animation: Platform.OS === "web" ? "none" : "fade",
+        animationDuration: 200,
         contentStyle: { backgroundColor: "#FAF8FC" },
       }}
     />

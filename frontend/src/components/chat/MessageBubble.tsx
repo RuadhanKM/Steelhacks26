@@ -2,9 +2,8 @@ import { ChevronDown, Link2 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, {
-    FadeInLeft,
-    FadeInRight,
-    LinearTransition,
+  FadeInUp,
+  LinearTransition,
 } from "react-native-reanimated";
 
 import { ToolTraceRow } from "@/components/chat/ToolTrace";
@@ -73,16 +72,12 @@ export function MessageBubble({
   readonly index?: number;
 }) {
   const isUser = message.role === "user";
-  const entering = (isUser ? FadeInRight : FadeInLeft)
-    .duration(240)
-    .delay(Math.min(index * 45, 135))
-    .springify()
-    .damping(18);
+  const entering = FadeInUp.duration(180);
 
   return (
     <Animated.View
       entering={entering}
-      layout={LinearTransition.springify().damping(20)}
+      layout={LinearTransition.duration(150)}
       style={{
         alignSelf: isUser ? "flex-end" : "flex-start",
         backgroundColor: isUser ? "#5B3D85" : "#FFFFFF",

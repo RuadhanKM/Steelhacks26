@@ -6,7 +6,9 @@ export function proxy(request: NextRequest) {
   const hasSession = request.cookies.has("auth_session");
 
   const isProtectedRoute =
-    pathname.startsWith("/tools") || pathname.startsWith("/settings");
+    pathname.startsWith("/tools") ||
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/disputes");
   const isAuthRoute = pathname === "/login";
   const isRoot = pathname === "/";
 

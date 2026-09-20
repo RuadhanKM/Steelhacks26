@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppLogo } from "@/components/ui/AppLogo";
@@ -9,16 +9,23 @@ import { AppLogo } from "@/components/ui/AppLogo";
  * Landing screen. Public — the auth gate sends signed-in visitors to /chat.
  *
  * Three rows inside a safe area: logo, pitch, actions. The middle row takes the
- * leftover space, so the layout fills exactly one screen at any size. The
- * diagonal is a rotated white slab clipped by the screen.
+ * leftover space, so the layout fills exactly one screen at any size.
+ *
+ * The diagonal is a border triangle sitting on a white block — not a rotated
+ * view. A transformed view gets its own compositing layer on iOS and paints
+ * over its siblings whatever the zIndex says, which hid the sign-in button.
  */
 export default function LandingScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
 
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <View style={styles.slab} pointerEvents="none" />
+      <View style={styles.backdrop} pointerEvents="none">
+        <View style={[styles.diagonal, { borderRightWidth: width }]} />
+        <View style={styles.block} />
+      </View>
 
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom", "left", "right"]}>
         <View style={styles.header}>
@@ -68,19 +75,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#2A1848",
     overflow: "hidden",
   },
-  // Oversized so its corners stay off screen once rotated; the screen clips it.
-  // zIndex is explicit because a transformed view gets its own layer on iOS and
-  // would otherwise paint over the content — on web sibling order alone decides,
-  // which is why the button stayed visible there.
-  slab: {
-    zIndex: 0,
+  // The white lower half: a triangle for the slope, a solid block beneath it.
+  backdrop: {
     position: "absolute",
-    left: -80,
-    right: -80,
-    bottom: -130,
-    height: 400,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  diagonal: {
+    width: 0,
+    height: 0,
+    borderRightColor: "transparent",
+    borderBottomColor: "#FFFFFF",
+    borderBottomWidth: 86,
+    borderStyle: "solid",
+  },
+  block: {
+    height: 300,
     backgroundColor: "#FFFFFF",
-    transform: [{ rotate: "-9deg" }],
   },
   safeArea: {
     flex: 1,

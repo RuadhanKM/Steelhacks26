@@ -1,0 +1,6 @@
+.env
+*firebase-adminsdk*.json
+__pycache__/
+*.pyc
+.venv/
+/banking_demo/

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wrench, Settings, Gavel } from "lucide-react";
+import { Wrench, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -10,11 +10,6 @@ const navItems = [
     label: "Tools",
     href: "/tools",
     icon: <Wrench className="h-4 w-4" />,
-  },
-  {
-    label: "Disputes",
-    href: "/disputes",
-    icon: <Gavel className="h-4 w-4" />,
   },
   {
     label: "Settings",

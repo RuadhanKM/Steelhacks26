@@ -2,7 +2,7 @@ import { DisputesQueue } from "@/components/disputes-queue";
 
 export default function DisputesPage() {
   return (
-    <div className="p-8">
+    <div className="max-w-4xl mx-auto p-6 md:p-8">
       <div className="mb-6">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           Disputes

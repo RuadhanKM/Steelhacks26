@@ -103,6 +103,13 @@ class ToolTraceOut(BaseModel):
     timestamp: str
 
 
+class ChatSuggestion(BaseModel):
+    """A tap option offered with a canned reply: what it says, what it sends."""
+
+    label: str
+    prompt: str
+
+
 class ChatResponse(BaseModel):
     # `message` keeps the existing frontend contract; the rest is additive.
     message: str
@@ -116,6 +123,11 @@ class ChatResponse(BaseModel):
     toolsUsed: list[str] = Field(default_factory=list)
     sourcedFrom: list[str] = Field(default_factory=list)
     toolTraces: list[ToolTraceOut] = Field(default_factory=list)
+    # Offered when the assistant could not act on the message as written.
+    suggestions: list[ChatSuggestion] = Field(default_factory=list)
+    # How this turn was handled: the route, and whether rules or the classifier decided.
+    routedAs: str | None = None
+    routedBy: str | None = None
     policyConfigVersion: str
 
 

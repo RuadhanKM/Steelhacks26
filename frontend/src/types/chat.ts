@@ -143,6 +143,18 @@ export interface ChatDisputeCase {
   case: DisputeCase;
 }
 
+/** A tap option offered when the assistant could not act on the message. */
+export interface ChatSuggestion {
+  label: string;
+  prompt: string;
+}
+
+export interface ChatSuggestions {
+  kind: "suggestions";
+  id: string;
+  suggestions: ChatSuggestion[];
+}
+
 export interface ChatTriageForm {
   kind: "triage_form";
   id: string;
@@ -155,7 +167,8 @@ export type ChatEntry =
   | ChatSystemNotice
   | ChatDisputeForm
   | ChatDisputeCase
-  | ChatTriageForm;
+  | ChatTriageForm
+  | ChatSuggestions;
 
 export interface ChatMessageGroup {
   id: string;
@@ -171,7 +184,8 @@ export type ChatTimelineItem =
   | { type: "system_notice"; id: string; notice: ChatSystemNotice }
   | { type: "dispute_form"; id: string; entry: ChatDisputeForm }
   | { type: "dispute_case"; id: string; entry: ChatDisputeCase }
-  | { type: "triage_form"; id: string; entry: ChatTriageForm };
+  | { type: "triage_form"; id: string; entry: ChatTriageForm }
+  | { type: "suggestions"; id: string; entry: ChatSuggestions };
 
 export interface ChatApiRequest {
   message: string;
@@ -193,6 +207,10 @@ export interface ChatApiResponse {
   disputeForm?: DisputeForm | null;
   /** Present when the assistant opened the unfamiliar-charge check. */
   fraudTriage?: TriageForm | null;
+  /** Offered when the message was off-topic or unclear. */
+  suggestions?: ChatSuggestion[];
+  routedAs?: string | null;
+  routedBy?: string | null;
   policyConfigVersion?: string;
 }
 

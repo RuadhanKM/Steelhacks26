@@ -13,11 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ToolReturnPart
 
+from agent.router import classify, is_in_scope
 from agent.tools import SessionDeps, agent, missing_api_key
 from api.deps import current_session
 from models.schemas import (
     ChatRequest,
     ChatResponse,
+    ChatSuggestion,
     DisputeForm,
     DuplicateCandidate,
     PendingConfirmation,
@@ -25,6 +27,7 @@ from models.schemas import (
     TriageForm,
 )
 from policy.actions import CONFIG_VERSION, ActionNotAllowed, requires_confirmation
+from policy.services import REPLIES, suggestions
 from services.dispute_form_service import FormError, build_dispute_form
 from services.dispute_service import disputable_duplicates
 from services.fraud_service import TriageError, build_triage_form
@@ -158,10 +161,24 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
             detail=f"{missing_key} is not set, so the assistant cannot run.",
         )
 
-    deps = SessionDeps(user_id=session.user_id, session_id=session.session_id)
     if _is_new_conversation(request):
         session.history = []
         session.pending_confirmation = None
+
+    # Classify before waking the main agent. A greeting or an off-topic question
+    # is answered from a fixed list here, for a fraction of a full turn.
+    route, decided_by = classify(request.message)
+    if not is_in_scope(route, decided_by):
+        return ChatResponse(
+            message=REPLIES[route],
+            sessionId=session.session_id,
+            suggestions=[ChatSuggestion(**item) for item in suggestions()],
+            routedAs=route,
+            routedBy=decided_by,
+            policyConfigVersion=CONFIG_VERSION,
+        )
+
+    deps = SessionDeps(user_id=session.user_id, session_id=session.session_id)
 
     try:
         # History lives on the server session, not in the request body: the client
@@ -256,6 +273,8 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
         # Provenance for the app: which services this turn's figures came from.
         # An answer with no tool behind it has an empty list, which the app checks.
         sourcedFrom=tool_names,
+        routedAs=route,
+        routedBy=decided_by,
         toolTraces=[
             ToolTraceOut(id=f"{session.session_id}-{index}", name=name, timestamp=now)
             for index, name in enumerate(tool_names)

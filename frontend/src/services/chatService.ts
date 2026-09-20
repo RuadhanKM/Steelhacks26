@@ -4,6 +4,7 @@ import type {
   ChatApiRequest,
   ChatApiResponse,
   ChatMessage,
+  ChatSuggestion,
   DisputeForm,
   ToolTrace,
   TriageForm,
@@ -22,6 +23,7 @@ export interface ChatReply {
   toolTraces: ToolTrace[];
   disputeForm: DisputeForm | null;
   fraudTriage: TriageForm | null;
+  suggestions: ChatSuggestion[];
 }
 
 export async function sendMessage(
@@ -54,6 +56,7 @@ export async function sendMessage(
     })),
     disputeForm: data.disputeForm ?? null,
     fraudTriage: data.fraudTriage ?? null,
+    suggestions: data.suggestions ?? [],
   };
 }
 

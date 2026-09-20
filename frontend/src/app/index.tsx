@@ -16,6 +16,7 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { DisputeCaseCard } from "@/components/chat/DisputeCaseCard";
 import { DisputeFormCard } from "@/components/chat/DisputeFormCard";
+import { SuggestionChips } from "@/components/chat/SuggestionChips";
 import { TriageCard } from "@/components/chat/TriageCard";
 import {
     DayDivider,
@@ -100,6 +101,9 @@ export default function ChatScreen() {
       } else if (entry.kind === "triage_form") {
         flushMessages();
         items.push({ type: "triage_form", id: entry.id, entry });
+      } else if (entry.kind === "suggestions") {
+        flushMessages();
+        items.push({ type: "suggestions", id: entry.id, entry });
       } else {
         flushMessages();
         items.push({ type: "system_notice", id: entry.id, notice: entry });
@@ -190,6 +194,16 @@ export default function ChatScreen() {
                 kind: "triage_form",
                 id: `triage_${response.fraudTriage.formId}`,
                 form: response.fraudTriage,
+              },
+            ];
+          }
+          if (response.suggestions.length > 0) {
+            return [
+              ...next,
+              {
+                kind: "suggestions",
+                id: `suggestions_${assistantMessage.id}`,
+                suggestions: response.suggestions,
               },
             ];
           }
@@ -302,6 +316,15 @@ export default function ChatScreen() {
       if (item.type === "dispute_case") {
         return <DisputeCaseCard case={item.entry.case} onRefreshed={handleCaseRefreshed} />;
       }
+      if (item.type === "suggestions") {
+        return (
+          <SuggestionChips
+            suggestions={item.entry.suggestions}
+            onSelect={handleSend}
+            disabled={isTyping}
+          />
+        );
+      }
       if (item.type === "triage_form") {
         return (
           <TriageCard
@@ -314,7 +337,15 @@ export default function ChatScreen() {
       }
       return <MessageGroup group={item.group} />;
     },
-    [handleCaseRefreshed, handleDisputeSubmitted, handleRetry, handleTriageAnswered, signOut],
+    [
+      handleCaseRefreshed,
+      handleDisputeSubmitted,
+      handleRetry,
+      handleSend,
+      handleTriageAnswered,
+      isTyping,
+      signOut,
+    ],
   );
 
 

@@ -31,7 +31,7 @@ from services.transaction_service import find_possible_duplicates as _find_possi
 
 
 
-DEFAULT_MODEL = os.environ.get("BANKING_AGENT_MODEL", "anthropic:claude-haiku-4-5")
+DEFAULT_MODEL = os.environ.get("BANKING_AGENT_MODEL", "anthropic:claude-opus-5")
 
 # Which key each provider needs, so the chat route can say what is missing
 # rather than failing inside the model client.

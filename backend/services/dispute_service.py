@@ -5,7 +5,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from db.firestore import db
 from policy.actions import check_enabled
-from services.transaction_service import get_transactions_by_ids
+from services.transaction_service import find_possible_duplicates, get_transactions_by_ids
 
 # Case lifecycle. A case is open until staff resolve or reject it.
 STATUS_SUBMITTED = "submitted"
@@ -53,11 +53,11 @@ def create_dispute(
         # the caller learns nothing about other users' data.
         raise DisputeError(f"Not your transaction, or it does not exist: {', '.join(missing)}")
 
-    existing = find_open_dispute_for_transactions(user_id, unique_ids)
+    # Every status counts, not just the open ones: a resolved case already paid
+    # the credit, so disputing the same charge again would pay it twice.
+    existing = find_existing_dispute_for_transactions(user_id, unique_ids)
     if existing is not None:
-        raise DisputeError(
-            f"These charges are already in case {existing['id']} ({existing['status']})."
-        )
+        raise DisputeError(_already_disputed_message(existing))
 
     amounts = {row["amountCents"] for row in owned}
     merchants = {row.get("merchant") for row in owned}
@@ -92,20 +92,67 @@ def create_dispute(
     return {"id": doc_ref.id, **case}
 
 
-def find_open_dispute_for_transactions(user_id: str, transaction_ids: list[str]) -> dict | None:
-    """Return this user's open case covering any of these charges, if one exists."""
+def _already_disputed_message(case: dict) -> str:
+    """Say what happened to the case, so the customer knows where they stand."""
+    status = case.get("status")
+    if status == STATUS_RESOLVED:
+        return (
+            f"Those charges were already disputed in case {case['id']} and a credit was posted. "
+            "Contact a banker if something still looks wrong."
+        )
+    if status == STATUS_REJECTED:
+        return (
+            f"Those charges were reviewed in case {case['id']} and the dispute was not approved. "
+            "A banker can take another look."
+        )
+    return f"Those charges are already in case {case['id']} ({status})."
+
+
+def find_existing_dispute_for_transactions(
+    user_id: str, transaction_ids: list[str], statuses: tuple[str, ...] | None = None
+) -> dict | None:
+    """Return this user's case covering any of these charges, if one exists.
+
+    Defaults to every status. Pass ``statuses`` to narrow it, e.g. OPEN_STATUSES.
+    """
     wanted = set(transaction_ids)
-    docs = (
-        db.collection("disputes")
-        .where(filter=FieldFilter("userId", "==", user_id))
-        .where(filter=FieldFilter("status", "in", list(OPEN_STATUSES)))
-        .stream()
-    )
+    query = db.collection("disputes").where(filter=FieldFilter("userId", "==", user_id))
+    if statuses is not None:
+        query = query.where(filter=FieldFilter("status", "in", list(statuses)))
+    docs = query.stream()
     for doc in docs:
         case = doc.to_dict()
         if wanted & set(case.get("transactionIds", [])):
             return {"id": doc.id, **case}
     return None
+
+
+def disputable_duplicates(user_id: str) -> list[dict]:
+    """Duplicate candidates that could still be disputed, i.e. not already in a case."""
+    spoken_for = disputed_transaction_ids(user_id)
+    return [
+        candidate
+        for candidate in find_possible_duplicates(user_id)
+        if not (set(candidate["transactionIds"]) & spoken_for)
+    ]
+
+
+def disputed_transaction_ids(user_id: str) -> set[str]:
+    """Every charge of this user's that already sits in a case, whatever its status.
+
+    A charge in a case is not disputable again: an open case is already being
+    worked, and a resolved one has been credited.
+    """
+    docs = (
+        db.collection("disputes")
+        .where(filter=FieldFilter("userId", "==", user_id))
+        .stream()
+    )
+    return {
+        transaction_id
+        for doc in docs
+        for transaction_id in doc.to_dict().get("transactionIds", [])
+    }
 
 
 def get_dispute(dispute_id: str, user_id: str | None = None) -> dict:

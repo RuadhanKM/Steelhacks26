@@ -8,6 +8,7 @@ from services.dispute_review_service import (
     ReviewError,
     approve_dispute,
     claim_for_review,
+    issue_provisional_credit,
     list_pending_reviews,
     reject_dispute,
 )
@@ -26,6 +27,21 @@ def pending_reviews(session: Session = Depends(staff_session)):
 def claim(dispute_id: str, session: Session = Depends(staff_session)):
     try:
         return claim_for_review(dispute_id, session.user_id)
+    except ReviewError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/disputes/{dispute_id}/provisional-credit", response_model=DisputeResponse)
+def provisional_credit(
+    dispute_id: str,
+    request: ReviewRequest | None = None,
+    session: Session = Depends(staff_session),
+):
+    """Credit the customer while the claim is investigated. Not a refund — reversible."""
+    try:
+        return issue_provisional_credit(dispute_id, session.user_id, request.note if request else None)
+    except ActionNotAllowed as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ReviewError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

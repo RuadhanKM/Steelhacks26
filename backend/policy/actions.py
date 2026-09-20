@@ -7,7 +7,7 @@ ran under, so a case can be reconstructed after the configuration changes.
 from dataclasses import dataclass
 
 # Bump this whenever the table below changes. Stored on every record the gate allows.
-CONFIG_VERSION = "2026-09-19.1"
+CONFIG_VERSION = "2026-09-20.1"
 
 
 class Tier:
@@ -42,6 +42,28 @@ ACTIONS: dict[str, ActionPolicy] = {
     ),
     "review_dispute": ActionPolicy(
         Tier.IRREVERSIBLE_WRITE, True, True, "Staff approval or rejection of a dispute case"
+    ),
+    "get_cards": ActionPolicy(Tier.READ, True, False, "List the customer's own cards"),
+    # Triage asks whether the customer recognises a charge before anything is
+    # locked or claimed. It only issues a form, so it is not a money action.
+    "start_fraud_triage": ActionPolicy(
+        Tier.REVERSIBLE_WRITE, True, False, "Issue the unfamiliar-charge triage form"
+    ),
+    # Locking is reversible in principle, but it stops the customer's payments
+    # today, so it is confirmed like a money action and named to the last four.
+    "lock_card": ActionPolicy(
+        Tier.IRREVERSIBLE_WRITE, True, True, "Block a specific card against further charges"
+    ),
+    "replace_card": ActionPolicy(
+        Tier.IRREVERSIBLE_WRITE, True, True, "Cancel a card for good and order a replacement"
+    ),
+    "create_fraud_claim": ActionPolicy(
+        Tier.IRREVERSIBLE_WRITE, True, True, "Open a fraud claim for a charge the customer disowns"
+    ),
+    # A provisional credit is real money that may be taken back, so it is its
+    # own action rather than part of approving a case.
+    "issue_provisional_credit": ActionPolicy(
+        Tier.IRREVERSIBLE_WRITE, True, True, "Credit the customer while the claim is investigated"
     ),
 }
 

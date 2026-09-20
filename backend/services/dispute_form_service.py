@@ -19,6 +19,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from db.firestore import db
 from policy.actions import CONFIG_VERSION, check_enabled
 from services.account_service import get_accounts_for_user
+from services.dispute_service import disputed_transaction_ids
 from services.transaction_service import find_possible_duplicates, get_transactions_for_user
 
 FORM_TTL = timedelta(minutes=30)
@@ -80,9 +81,14 @@ def build_dispute_form(user_id: str) -> dict:
         raise FormError("This customer has no accounts to dispute a charge on.")
 
     cutoff = _now() - CHARGE_LOOKBACK
+    # A charge already in a case cannot be disputed again, so it is not offered.
+    # Without this the form keeps proposing charges that were already credited.
+    already_disputed = disputed_transaction_ids(user_id)
     charges = []
     for row in get_transactions_for_user(user_id):
         if row.get("status") != "posted" or (row.get("amountCents") or 0) >= 0:
+            continue
+        if row["id"] in already_disputed:
             continue
         # A transfer between the customer's own accounts is not a merchant
         # charge, so there is nothing to dispute about it.
@@ -94,6 +100,11 @@ def build_dispute_form(user_id: str) -> dict:
         charges.append(row)
     charges = charges[:MAX_CHARGES_OFFERED]
     if not charges:
+        if already_disputed:
+            raise FormError(
+                "Every recent charge is already in a dispute case. Check the status of those "
+                "cases, or contact a banker about a charge that is not listed."
+            )
         raise FormError("No recent posted charges are available to dispute.")
 
     # Prefill from the duplicate finder so the common case is one tap, while the

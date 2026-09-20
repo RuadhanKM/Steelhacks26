@@ -22,7 +22,9 @@ logfire.instrument_pydantic_ai()
 from api.accounts import router as accounts_router
 from api.chat import router as chat_router
 from api.dispute_review import router as dispute_review_router
+from api.cards import router as cards_router
 from api.disputes import router as disputes_router
+from api.fraud import router as fraud_router
 from api.session import router as session_router
 
 
@@ -61,6 +63,8 @@ app.include_router(chat_router)
 app.include_router(disputes_router)
 app.include_router(dispute_review_router)
 app.include_router(session_router)
+app.include_router(cards_router)
+app.include_router(fraud_router)
 
 # Request spans, so a slow or failing chat turn shows the HTTP call around it.
 logfire.instrument_fastapi(app)
@@ -71,6 +75,3 @@ def read_root():
     return {"message": "FastAPI is connected to Firebase!"}
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}

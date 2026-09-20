@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  CreditCard,
+  HandCoins,
   Loader2,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -15,11 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ApiError,
   approveDispute,
+  CARD_ACTION_LABELS,
   claimDispute,
   formatAmount,
   formatDateTime,
   getPendingDisputes,
   getSessionInfo,
+  issueProvisionalCredit,
+  RECOGNITION_LABELS,
   rejectDispute,
   REASON_LABELS,
   type DisputeCase,
@@ -28,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type Decision = "approve" | "reject";
+type Action = Decision | "provisional" | "claim";
 
 function StatusBadge({ status }: { status: DisputeCase["status"] }) {
   const styles: Record<string, string> = {
@@ -62,8 +69,29 @@ function CaseCard({
   onDecided: (updated: DisputeCase, decision: Decision) => void;
 }) {
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState<Decision | "claim" | null>(null);
+  const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [current, setCurrent] = useState<DisputeCase>(dispute);
+
+  const isFraud = current.claimType === "fraud";
+  const provisionalCents = current.provisionalCreditCents ?? 0;
+
+  const credit = async () => {
+    setBusy("provisional");
+    setError(null);
+    try {
+      if (current.status === "submitted") await claimDispute(current.id);
+      setCurrent(await issueProvisionalCredit(current.id, note));
+    } catch (creditError) {
+      setError(
+        creditError instanceof ApiError
+          ? creditError.message
+          : "Could not issue that credit. Try again.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const decide = async (decision: Decision) => {
     setBusy(decision);
@@ -71,13 +99,13 @@ function CaseCard({
     try {
       // Claiming first records who reviewed it, so two reviewers do not both
       // work the same case.
-      if (dispute.status === "submitted") {
-        await claimDispute(dispute.id);
+      if (current.status === "submitted") {
+        await claimDispute(current.id);
       }
       const updated =
         decision === "approve"
-          ? await approveDispute(dispute.id, note)
-          : await rejectDispute(dispute.id, note);
+          ? await approveDispute(current.id, note)
+          : await rejectDispute(current.id, note);
       onDecided(updated, decision);
     } catch (decideError) {
       setError(
@@ -95,20 +123,26 @@ function CaseCard({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-foreground">
-              {dispute.merchant ?? "Unknown merchant"}
+              {current.merchant ?? "Unknown merchant"}
             </h3>
-            <StatusBadge status={dispute.status} />
+            <StatusBadge status={current.status} />
+            {isFraud && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600">
+                <ShieldAlert className="h-3 w-3" />
+                Fraud claim
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {REASON_LABELS[dispute.reason ?? ""] ?? dispute.reason ?? "—"} ·{" "}
-            {dispute.transactionIds.length} charge
-            {dispute.transactionIds.length === 1 ? "" : "s"} · opened{" "}
-            {formatDateTime(dispute.createdAt)}
+            {REASON_LABELS[current.reason ?? ""] ?? current.reason ?? "—"} ·{" "}
+            {current.transactionIds.length} charge
+            {current.transactionIds.length === 1 ? "" : "s"} · opened{" "}
+            {formatDateTime(current.createdAt)}
           </p>
         </div>
         <div className="text-right">
           <p className="text-lg font-semibold text-foreground">
-            {formatAmount(dispute.claimedAmountCents)}
+            {formatAmount(current.claimedAmountCents)}
           </p>
           <p className="text-xs text-muted-foreground">to credit</p>
         </div>
@@ -117,26 +151,26 @@ function CaseCard({
       <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-border pt-4 text-xs">
         <div>
           <dt className="text-muted-foreground">Customer</dt>
-          <dd className="mt-0.5 font-mono text-foreground">{dispute.userId}</dd>
+          <dd className="mt-0.5 font-mono text-foreground">{current.userId}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Account</dt>
           <dd className="mt-0.5 font-mono text-foreground">
-            {dispute.accountId ?? "—"}
+            {current.accountId ?? "—"}
           </dd>
         </div>
         <div className="col-span-2">
           <dt className="text-muted-foreground">Charges</dt>
           <dd className="mt-0.5 font-mono text-foreground">
-            {dispute.transactionIds.join(", ")}
+            {current.transactionIds.join(", ")}
           </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Contacted merchant</dt>
           <dd className="mt-0.5 text-foreground">
-            {dispute.contactedMerchant === true
+            {current.contactedMerchant === true
               ? "Yes"
-              : dispute.contactedMerchant === false
+              : current.contactedMerchant === false
                 ? "No"
                 : "Not said"}
           </dd>
@@ -144,14 +178,40 @@ function CaseCard({
         <div>
           <dt className="text-muted-foreground">Policy version</dt>
           <dd className="mt-0.5 font-mono text-foreground">
-            {dispute.policyConfigVersion ?? "—"}
+            {current.policyConfigVersion ?? "—"}
           </dd>
         </div>
-        {dispute.note && (
+        {isFraud && (
+          <>
+            <div>
+              <dt className="text-muted-foreground">Customer says</dt>
+              <dd className="mt-0.5 text-foreground">
+                {RECOGNITION_LABELS[current.recognition ?? ""] ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Card</dt>
+              <dd className="mt-0.5 flex items-center gap-1.5 text-foreground">
+                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                {CARD_ACTION_LABELS[current.cardAction ?? "none"] ?? "—"}
+              </dd>
+            </div>
+          </>
+        )}
+        {provisionalCents > 0 && (
+          <div className="col-span-2">
+            <dt className="text-muted-foreground">Temporary credit</dt>
+            <dd className="mt-0.5 text-foreground">
+              {formatAmount(provisionalCents)} posted while the claim is investigated
+              {current.provisionalCreditPermanent ? " · now permanent" : ""}
+            </dd>
+          </div>
+        )}
+        {current.note && (
           <div className="col-span-2">
             <dt className="text-muted-foreground">Customer note</dt>
             <dd className="mt-0.5 text-foreground italic">
-              &ldquo;{dispute.note}&rdquo;
+              &ldquo;{current.note}&rdquo;
             </dd>
           </div>
         )}
@@ -175,9 +235,27 @@ function CaseCard({
 
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            Approving posts a reversal and updates the balance together.
+            {provisionalCents > 0
+              ? "Approving makes the temporary credit permanent. Rejecting takes it back."
+              : "Approving posts a credit and updates the balance together."}
           </p>
           <div className="flex gap-2">
+            {isFraud && provisionalCents === 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy !== null}
+                onClick={credit}
+                title="Credit the customer while the claim is investigated. Reversible."
+              >
+                {busy === "provisional" ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <HandCoins />
+                )}
+                Temporary credit
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"

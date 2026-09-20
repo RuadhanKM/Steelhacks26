@@ -83,6 +83,14 @@ export interface DisputeCase {
   reviewNote?: string | null;
   reversalTransactionId?: string | null;
   reversalAmountCents?: number | null;
+  claimType?: string | null;
+  recognition?: string | null;
+  cardId?: string | null;
+  cardAction?: string | null;
+  provisionalCreditCents?: number | null;
+  provisionalCreditTransactionId?: string | null;
+  provisionalCreditPermanent?: boolean | null;
+  provisionalCreditReversedTransactionId?: string | null;
 }
 
 export const getSessionInfo = () => request<SessionInfo>("/session");
@@ -92,6 +100,13 @@ export const getPendingDisputes = () =>
 
 export const claimDispute = (id: string) =>
   request<DisputeCase>(`/staff/disputes/${id}/claim`, { method: "POST" });
+
+/** Credit the customer while the claim is investigated. Reversible on rejection. */
+export const issueProvisionalCredit = (id: string, note?: string) =>
+  request<DisputeCase>(`/staff/disputes/${id}/provisional-credit`, {
+    method: "POST",
+    body: { note: note?.trim() || null },
+  });
 
 export const approveDispute = (id: string, note?: string) =>
   request<DisputeCase>(`/staff/disputes/${id}/approve`, {
@@ -127,4 +142,16 @@ export const REASON_LABELS: Record<string, string> = {
   unauthorized: "Not authorised",
   wrong_amount: "Wrong amount",
   goods_not_received: "Goods not received",
+};
+
+export const CARD_ACTION_LABELS: Record<string, string> = {
+  none: "No card action",
+  lock: "Card blocked",
+  replace: "Card cancelled, replacement ordered",
+};
+
+export const RECOGNITION_LABELS: Record<string, string> = {
+  not_recognised: "Customer does not recognise the charge",
+  household: "Someone with card access may have made it",
+  i_made_it: "Customer made the purchase",
 };

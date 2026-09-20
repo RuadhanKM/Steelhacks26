@@ -22,9 +22,12 @@ from models.schemas import (
     DuplicateCandidate,
     PendingConfirmation,
     ToolTraceOut,
+    TriageForm,
 )
 from policy.actions import CONFIG_VERSION, ActionNotAllowed, requires_confirmation
 from services.dispute_form_service import FormError, build_dispute_form
+from services.dispute_service import disputable_duplicates
+from services.fraud_service import TriageError, build_triage_form
 from services.session_service import Session
 
 router = APIRouter(tags=["chat"])
@@ -78,9 +81,60 @@ DISPUTE_INTENT = (
 )
 
 
+# A charge the customer disowns, or a card at risk. These go to triage, which
+# asks whether they made the purchase before anything is blocked or claimed.
+FRAUD_INTENT = (
+    "didn't authorize",
+    "didn't authorise",
+    "did not authorize",
+    "did not authorise",
+    "unauthorized",
+    "unauthorised",
+    "without permission",
+    "didn't make this",
+    "did not make this",
+    "did not make that",
+    "not mine",
+    "don't recognize",
+    "don't recognise",
+    "do not recognize",
+    "do not recognise",
+    "never heard of",
+    "fraud",
+    "stolen",
+    "lost my card",
+    "someone used my card",
+    "card was used",
+)
+
+
+# A claim specifically about being billed twice. If no such pair exists, the
+# answer is "there isn't one", not a form.
+DUPLICATE_CLAIM = (
+    "charged twice",
+    "charged me twice",
+    "double charge",
+    "double charged",
+    "duplicate charge",
+    "charged two times",
+    "twice for",
+    "same charge twice",
+)
+
+
 def _wants_dispute(message: str) -> bool:
     lowered = message.lower()
     return any(phrase in lowered for phrase in DISPUTE_INTENT)
+
+
+def _claims_duplicate(message: str) -> bool:
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in DUPLICATE_CLAIM)
+
+
+def _suspects_fraud(message: str) -> bool:
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in FRAUD_INTENT)
 
 
 def _is_new_conversation(request: ChatRequest) -> bool:
@@ -131,7 +185,10 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
     tool_results = _tool_results(result.new_messages())
     candidates: list[DuplicateCandidate] = []
     dispute_form: DisputeForm | None = None
+    triage_form: TriageForm | None = None
     for tool_name, content in tool_results:
+        if tool_name == "start_fraud_triage" and isinstance(content, dict) and "formId" in content:
+            triage_form = TriageForm(**content)
         if tool_name == "find_possible_duplicates" and isinstance(content, list):
             candidates.extend(DuplicateCandidate(**row) for row in content)
         elif tool_name == "start_dispute_form" and isinstance(content, dict) and "formId" in content:
@@ -141,8 +198,25 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
     # often when an earlier turn already issued one. The customer would see a
     # sentence about a form that is not on screen, so the server issues it.
     # Its own reply mentioning a form counts: that promise has to be kept.
+    # A disowned charge goes to triage, not to the dispute form: the customer is
+    # asked whether they made the purchase before anything is blocked.
+    if triage_form is None and dispute_form is None and _suspects_fraud(request.message):
+        try:
+            triage_form = TriageForm(**build_triage_form(session.user_id))
+        except (TriageError, ActionNotAllowed):
+            triage_form = None
+
     mentions_form = "form" in (result.output or "").lower()
-    if dispute_form is None and (_wants_dispute(request.message) or mentions_form):
+    # A double-charge claim with no matching pair gets an answer, not a form.
+    duplicate_claim_without_pair = _claims_duplicate(request.message) and not disputable_duplicates(
+        session.user_id
+    )
+    if (
+        dispute_form is None
+        and triage_form is None
+        and not duplicate_claim_without_pair
+        and (_wants_dispute(request.message) or mentions_form)
+    ):
         try:
             dispute_form = DisputeForm(**build_dispute_form(session.user_id))
         except (FormError, ActionNotAllowed):
@@ -176,6 +250,7 @@ def chat(request: ChatRequest, session: Session = Depends(current_session)):
         sessionId=session.session_id,
         duplicateCandidates=candidates,
         disputeForm=dispute_form,
+        fraudTriage=triage_form,
         pendingConfirmation=pending,
         toolsUsed=tool_names,
         # Provenance for the app: which services this turn's figures came from.

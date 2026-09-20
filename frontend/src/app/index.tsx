@@ -24,7 +24,6 @@ import {
     isSameCalendarDay,
     MessageGroup,
 } from "@/components/chat/MessageBubble";
-import { QuickActions } from "@/components/chat/QuickActions";
 import { SystemNotice } from "@/components/chat/SystemNotice";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { useAuth } from "@/context/AuthContext";
@@ -50,7 +49,7 @@ const WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
   sourcedFrom: [],
   content:
-    "Welcome. I'm your personal banking assistant. I can help you check balances, make transfers, pay bills, and more. How can I help you today?",
+    "Welcome. I'm Pyre, your banking assistant. I can help you check balances, make transfers, pay bills, and more. How can I help you today?",
   timestamp: new Date(),
 };
 
@@ -318,7 +317,6 @@ export default function ChatScreen() {
     [handleCaseRefreshed, handleDisputeSubmitted, handleRetry, handleTriageAnswered, signOut],
   );
 
-  const showQuickActions = entries.filter((entry) => entry.kind === "message").length <= 1;
 
   return (
     <View
@@ -365,8 +363,6 @@ export default function ChatScreen() {
             </Pressable>
           )}
 
-          {/* Quick Actions — shown only at start */}
-          {showQuickActions && <QuickActions onSelect={handleSend} />}
         </View>
 
         {/* Input Bar */}
@@ -376,7 +372,7 @@ export default function ChatScreen() {
             value={draft}
             onChangeText={setDraft}
             disabled={isTyping}
-            placeholder={isOffline ? "Assistant unavailable" : undefined}
+            placeholder={isOffline ? "Pyre unavailable" : undefined}
           />
         </SafeAreaView>
         </KeyboardAvoidingView>

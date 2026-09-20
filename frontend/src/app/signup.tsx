@@ -83,7 +83,7 @@ export default function SignupScreen() {
           >
             <Text className="text-3xl font-bold text-chase-textPrimary">Create account</Text>
             <Text className="mt-2 text-base text-chase-textSecondary">
-              Create a secure account to use the banking assistant.
+              Create a secure account to use Pyre.
             </Text>
 
             <TextInput

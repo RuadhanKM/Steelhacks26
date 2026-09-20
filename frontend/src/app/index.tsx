@@ -69,7 +69,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   // Oversized so its corners stay off screen once rotated; the screen clips it.
+  // zIndex is explicit because a transformed view gets its own layer on iOS and
+  // would otherwise paint over the content — on web sibling order alone decides,
+  // which is why the button stayed visible there.
   slab: {
+    zIndex: 0,
     position: "absolute",
     left: -80,
     right: -80,
@@ -81,6 +85,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingHorizontal: 28,
+    zIndex: 1,
   },
   header: {
     paddingTop: 12,

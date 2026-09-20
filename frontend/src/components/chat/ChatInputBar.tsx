@@ -1,4 +1,5 @@
-import { Pressable, Text, TextInput, View } from "react-native";
+import { ArrowUp } from "lucide-react-native";
+import { Pressable, TextInput, View } from "react-native";
 
 interface ChatInputBarProps {
   onSend: (message: string) => void;
@@ -25,37 +26,60 @@ export function ChatInputBar({
   const canSend = value.trim().length > 0 && !disabled;
 
   return (
-    <View className="px-4 pt-2 pb-2 bg-white border-t border-chase-border">
-      <View className="flex-row items-end bg-chase-bg rounded-3xl border border-chase-border px-4 py-1">
+    <View className="px-4 py-2 bg-white border-t border-chase-border">
+      <View
+        className="flex-row items-center bg-chase-bg border border-chase-border pl-4 rounded-full"
+        style={{
+          height: 48,
+          borderRadius: 24,
+          paddingRight: 3,
+          overflow: "hidden",
+        }}
+      >
         <TextInput
-          className="flex-1 text-[16px] text-chase-textPrimary py-2.5 max-h-[100px]"
+          className="flex-1 text-[15px] text-chase-textPrimary h-full pr-2"
           placeholder={placeholder}
           placeholderTextColor="#A79CAF"
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={handleSend}
-          multiline
           editable={!disabled}
           returnKeyType="send"
-          submitBehavior="submit"
+          style={
+            {
+              outlineStyle: "none",
+              borderWidth: 0,
+              paddingVertical: 0,
+              resize: "none",
+            } as any
+          }
         />
         <Pressable
+          accessibilityLabel="Send message"
+          accessibilityRole="button"
           onPress={handleSend}
           disabled={!canSend}
-          className={`ml-2 mb-1.5 w-9 h-9 rounded-full items-center justify-center ${
-            canSend ? "bg-chase-blue" : "bg-chase-border"
-          }`}
+          className={`scale-[0.7] items-center justify-center rounded-full ${canSend ? "bg-chase-purple600 active:bg-chase-accent" : "bg-chase-border"
+            }`}
           style={({ pressed }) => ({
-            opacity: pressed && canSend ? 0.7 : 1,
+            width: 42,
+            height: 42,
+            borderRadius: 21,
+            flexShrink: 0,
+            opacity: pressed && canSend ? 0.8 : 1,
+            cursor: (canSend ? "pointer" : "default") as any,
           })}
         >
-          <Text
-            className={`text-lg font-bold ${
-              canSend ? "text-white" : "text-chase-textMuted"
-            }`}
-          >
-            ↑
-          </Text>
+          <ArrowUp
+            size={40}
+            color={canSend ? "#FFFFFF" : "#A79CAF"}
+            strokeWidth={1}
+            transform={[
+              { scale: 0.8 },
+              { translateX: 1.7 },
+              { translateY: 1.7 },
+            ]}
+          />
         </Pressable>
       </View>
     </View>

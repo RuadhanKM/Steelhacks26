@@ -1,7 +1,27 @@
-import { Check, ChevronDown, ChevronUp, ReceiptText } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+} from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  LayoutChangeEvent,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import Animated, {
+  FadeIn,
+  SlideInLeft,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { ApiRequestError } from "@/services/apiClient";
 import { submitDispute } from "@/services/disputeService";
@@ -17,6 +37,21 @@ interface DisputeFormCardProps {
   readonly submittedCaseId?: string;
   readonly onSubmitted: (opened: DisputeCase) => void;
   readonly onAuthError: () => void;
+}
+
+type StepId = 1 | 2 | 3 | 4;
+
+interface DisputeAnswers {
+  accountId: string;
+  reasonCode: string;
+  transactionIds: string[];
+  contactedMerchant: boolean | null;
+}
+
+interface StepOption {
+  value: string;
+  title: string;
+  subtitle?: string;
 }
 
 function formatAmount(cents?: number | null): string {
@@ -35,64 +70,84 @@ function fieldByName(form: DisputeForm, name: string): DisputeFormField | undefi
   return form.fields.find((field) => field.name === name);
 }
 
-/** Small uppercase label that separates the card into steps. */
-function SectionLabel({ children }: { readonly children: string }) {
-  return (
-    <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-chase-textMuted">
-      {children}
-    </Text>
-  );
-}
-
-function Checkbox({ checked }: { readonly checked: boolean }) {
+/** Blue radio circle displayed on the left side of single-select options. */
+function BlueRadio({ selected }: { readonly selected: boolean }) {
   return (
     <View
-      className={`h-[18px] w-[18px] items-center justify-center rounded-[5px] border-2 ${
-        checked ? "border-chase-purple600 bg-chase-purple600" : "border-chase-border bg-white"
-      }`}
+      className={`mr-3 h-4 w-4 items-center justify-center rounded-full border-2 ${selected ? "border-blue-600 bg-white" : "border-chase-border bg-white"
+        }`}
     >
-      {checked && <Check color="#FFFFFF" size={12} strokeWidth={3} />}
+      {selected && <View className="h-2 w-2 rounded-full bg-blue-600" />}
     </View>
   );
 }
 
-/** One charge: merchant and date on the left, amount right-aligned so they line up. */
-function ChargeRow({
-  option,
-  selected,
+/** Blue checkbox displayed on the left side of transaction options (allows picking up to 2). */
+function BlueCheckbox({
+  checked,
   disabled,
-  onPress,
 }: {
-  readonly option: DisputeFormOption;
-  readonly selected: boolean;
-  readonly disabled: boolean;
-  readonly onPress: () => void;
+  readonly checked: boolean;
+  readonly disabled?: boolean;
 }) {
   return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected, disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      className={`flex-row items-center rounded-xl border px-3 py-2.5 ${
-        selected ? "border-chase-purple600 bg-chase-lightBlue" : "border-chase-border bg-white"
-      }`}
+    <View
+      className={`mr-3 h-4 w-4 items-center justify-center rounded-[4px] border-2 ${checked
+          ? "border-blue-600 bg-blue-600"
+          : disabled
+            ? "border-gray-200 bg-gray-50"
+            : "border-chase-border bg-white"
+        }`}
     >
-      <Checkbox checked={selected} />
-      <View className="ml-3 flex-1">
-        <Text className="text-[14px] font-medium text-chase-textPrimary" numberOfLines={1}>
-          {option.merchant ?? option.label}
-        </Text>
-        <Text className="mt-0.5 text-[12px] text-chase-textMuted">
-          {formatDate(option.createdAt)}
-          {option.isDuplicateCandidate ? " · looks like a repeat" : ""}
-        </Text>
-      </View>
-      <Text className="ml-3 text-[14px] font-semibold text-chase-textPrimary">
-        {formatAmount(option.amountCents)}
-      </Text>
-    </Pressable>
+      {checked && <Check color="#FFFFFF" size={10} strokeWidth={3.5} />}
+    </View>
   );
+}
+
+interface OptionRowStyleProps {
+  isSelected: boolean;
+  isFlashing?: boolean;
+  hovered?: boolean;
+  pressed?: boolean;
+  disabled?: boolean;
+}
+
+function getOptionRowStyle({
+  isSelected,
+  isFlashing,
+  hovered,
+  pressed,
+  disabled,
+}: OptionRowStyleProps) {
+  if (disabled) {
+    return {
+      backgroundColor: "transparent",
+      opacity: 0.4,
+      cursor: "not-allowed" as any,
+    };
+  }
+
+  // Guaranteed visible gray flash on tap start or active press
+  if (isFlashing || pressed) {
+    return {
+      backgroundColor: "#D1D5DB",
+      cursor: "pointer" as any,
+    };
+  }
+
+  // Desktop hover
+  if (hovered) {
+    return {
+      backgroundColor: isSelected ? "rgba(37, 99, 235, 0.13)" : "#F3F4F6",
+      cursor: "pointer" as any,
+    };
+  }
+
+  // Idle state
+  return {
+    backgroundColor: isSelected ? "rgba(37, 99, 235, 0.08)" : "transparent",
+    cursor: "pointer" as any,
+  };
 }
 
 export function DisputeFormCard({
@@ -104,360 +159,753 @@ export function DisputeFormCard({
   const accountField = fieldByName(form, "accountId");
   const reasonField = fieldByName(form, "reasonCode");
   const chargesField = fieldByName(form, "transactionIds");
-  const noteField = fieldByName(form, "note");
   const contactedField = fieldByName(form, "contactedMerchant");
 
-  // The server prefills a likely duplicate pair; the customer can change any of it.
-  const [accountId, setAccountId] = useState<string>(
-    (accountField?.prefill as string) ?? accountField?.options[0]?.value ?? "",
-  );
-  const [reasonCode, setReasonCode] = useState<string>(
-    (reasonField?.prefill as string) ?? reasonField?.options[0]?.value ?? "",
-  );
-  const [transactionIds, setTransactionIds] = useState<string[]>(
-    (chargesField?.prefill as string[]) ?? [],
-  );
-  const [note, setNote] = useState<string>("");
-  const [contactedMerchant, setContactedMerchant] = useState<boolean>(
-    Boolean(contactedField?.prefill),
-  );
-  const [showAllCharges, setShowAllCharges] = useState(false);
-  const [showNote, setShowNote] = useState(false);
+  // Step state, animation direction & Answers
+  const [currentStep, setCurrentStep] = useState<StepId>(1);
+  const [direction, setDirection] = useState<"forward" | "backward">("forward");
+  const [showOtherCharges, setShowOtherCharges] = useState(false);
+
+  const initialPrefilledCharges = (chargesField?.prefill as string[]) ?? [];
+  const [answers, setAnswers] = useState<DisputeAnswers>({
+    accountId: "",
+    reasonCode: "",
+    transactionIds: initialPrefilledCharges.length === 2 ? initialPrefilledCharges : [],
+    contactedMerchant: null,
+  });
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSubmitted = Boolean(submittedCaseId);
+  const firstOptionRef = useRef<View | null>(null);
 
-  // Only charges on the chosen account are selectable, matching what the
-  // backend will accept.
-  const charges = useMemo(
-    () => (chargesField?.options ?? []).filter((option) => option.accountId === accountId),
-    [accountId, chargesField],
+  // Height animation without scaling/stretching content
+  const animatedHeight = useSharedValue<number>(0);
+  const isMounted = useRef(false);
+
+  const onContentLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const h = Math.round(e.nativeEvent.layout.height);
+      if (h <= 0) return;
+
+      if (!isMounted.current) {
+        isMounted.current = true;
+        animatedHeight.value = h;
+      } else {
+        animatedHeight.value = withTiming(h, { duration: 240 });
+      }
+    },
+    [animatedHeight],
   );
 
-  // The suggested pair leads; the rest stays behind a disclosure so the card
-  // does not open as a wall of twenty rows.
-  const suggested = useMemo(
-    () => charges.filter((option) => option.isDuplicateCandidate),
-    [charges],
-  );
-  const others = useMemo(
-    () => charges.filter((option) => !option.isDuplicateCandidate),
-    [charges],
-  );
-  const listExpanded = showAllCharges || suggested.length === 0;
+  const animatedBubbleStyle = useAnimatedStyle(() => {
+    if (animatedHeight.value === 0) return {};
+    return {
+      height: animatedHeight.value,
+    };
+  });
 
-  const selectedCharges = charges.filter((option) => transactionIds.includes(option.value));
-  const selectedTotal = selectedCharges.reduce(
-    (total, option) => total + Math.abs(option.amountCents ?? 0),
-    0,
-  );
+  // Auto-focus the first option of the new step
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      (firstOptionRef.current as any)?.focus?.();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [currentStep]);
 
-  const chargesRequired =
-    reasonField?.options.find((option) => option.value === reasonCode)?.chargesRequired ?? 1;
-  const canSubmit =
-    !submitting && !isSubmitted && accountId !== "" && transactionIds.length >= chargesRequired;
+  // Derived options for Step 1
+  const accountOptions: StepOption[] = useMemo(() => {
+    if (accountField?.options && accountField.options.length > 0) {
+      return accountField.options.map((opt) => ({
+        value: opt.value,
+        title: opt.label.split(" — ")[0] || opt.label,
+        subtitle: opt.label.includes(" — ") ? opt.label.split(" — ")[1] : undefined,
+      }));
+    }
+    return [
+      { value: "checking", title: "Checking" },
+      { value: "savings", title: "Savings" },
+    ];
+  }, [accountField]);
 
-  const toggleCharge = (value: string) => {
-    setTransactionIds((current) =>
-      current.includes(value) ? current.filter((id) => id !== value) : [...current, value],
+  // Derived options for Step 2
+  const reasonOptions: StepOption[] = useMemo(() => {
+    if (reasonField?.options && reasonField.options.length > 0) {
+      return reasonField.options.map((opt) => ({
+        value: opt.value,
+        title: opt.label,
+      }));
+    }
+    return [
+      { value: "duplicate", title: "I was charged more than once for the same purchase" },
+      { value: "unauthorized", title: "I did not authorize this charge" },
+      { value: "wrong_amount", title: "The amount is wrong" },
+      { value: "not_received", title: "I never received what I paid for" },
+    ];
+  }, [reasonField]);
+
+  // Derived transactions for Step 3
+  const rawCharges: DisputeFormOption[] = useMemo(() => {
+    const available = chargesField?.options ?? [];
+    const matching = answers.accountId
+      ? available.filter((opt) => opt.accountId === answers.accountId)
+      : available;
+    const finalCharges = matching.length > 0 ? matching : available;
+
+    if (finalCharges.length > 0) {
+      return finalCharges;
+    }
+
+    // Default sample fallback matching the design wireframe
+    return [
+      {
+        value: "tx_1",
+        label: "Blue Bottle Coffee",
+        merchant: "Blue Bottle Coffee",
+        createdAt: "2026-09-17T12:00:00Z",
+        amountCents: 2410,
+        isDuplicateCandidate: true,
+      },
+      {
+        value: "tx_2",
+        label: "Riverside Market",
+        merchant: "Riverside Market",
+        createdAt: "2026-09-15T10:30:00Z",
+        amountCents: 8642,
+        isDuplicateCandidate: true,
+      },
+      {
+        value: "tx_3",
+        label: "Halide Auto Repair",
+        merchant: "Halide Auto Repair",
+        createdAt: "2026-09-12T14:15:00Z",
+        amountCents: 41200,
+        isDuplicateCandidate: false,
+      },
+      {
+        value: "tx_4",
+        label: "Northside Pharmacy",
+        merchant: "Northside Pharmacy",
+        createdAt: "2026-09-09T09:45:00Z",
+        amountCents: 3175,
+        isDuplicateCandidate: false,
+      },
+      {
+        value: "tx_5",
+        label: "Lumen Utilities",
+        merchant: "Lumen Utilities",
+        createdAt: "2026-09-05T16:20:00Z",
+        amountCents: 12890,
+        isDuplicateCandidate: false,
+      },
+    ];
+  }, [answers.accountId, chargesField]);
+
+  const { recommendedCharges, otherCharges } = useMemo(() => {
+    const recommended = rawCharges.filter((opt) => opt.isDuplicateCandidate);
+    const others = rawCharges.filter((opt) => !opt.isDuplicateCandidate);
+
+    if (recommended.length === 0 && rawCharges.length > 3) {
+      return {
+        recommendedCharges: rawCharges.slice(0, 2),
+        otherCharges: rawCharges.slice(2),
+      };
+    }
+
+    return {
+      recommendedCharges: recommended.length > 0 ? recommended : rawCharges,
+      otherCharges: recommended.length > 0 ? others : [],
+    };
+  }, [rawCharges]);
+
+  // Selected charges for Step 4 review
+  const selectedTransactions = useMemo(() => {
+    return rawCharges.filter((c) => answers.transactionIds.includes(c.value));
+  }, [answers.transactionIds, rawCharges]);
+
+  const selectedAccountLabel = useMemo(() => {
+    return (
+      accountOptions.find((o) => o.value === answers.accountId)?.title ??
+      answers.accountId ??
+      "Checking"
     );
+  }, [accountOptions, answers.accountId]);
+
+  const selectedReasonLabel = useMemo(() => {
+    return (
+      reasonOptions.find((o) => o.value === answers.reasonCode)?.title ??
+      answers.reasonCode ??
+      "Dispute"
+    );
+  }, [answers.reasonCode, reasonOptions]);
+
+  // Step 4 Options
+  const merchantContactOptions: StepOption[] = useMemo(
+    () => [
+      { value: "true", title: "I have contacted the merchant" },
+      { value: "false", title: "I have not contacted the merchant" },
+    ],
+    [],
+  );
+
+  // Execute submission logic
+  const handleFinalSubmit = useCallback(
+    async (finalAnswers: DisputeAnswers) => {
+      setSubmitting(true);
+      setError(null);
+      try {
+        const opened = await submitDispute({
+          formId: form.formId,
+          accountId: finalAnswers.accountId || accountOptions[0]?.value || "checking",
+          reasonCode: finalAnswers.reasonCode || reasonOptions[0]?.value || "wrong_amount",
+          transactionIds:
+            finalAnswers.transactionIds.length > 0
+              ? finalAnswers.transactionIds
+              : [rawCharges[0]?.value || "tx_1"],
+          contactedMerchant: Boolean(finalAnswers.contactedMerchant),
+        });
+        onSubmitted(opened);
+      } catch (submitError) {
+        if (submitError instanceof ApiRequestError) {
+          setError(submitError.message);
+        } else if (submitError instanceof Error && submitError.name === "AuthenticationError") {
+          onAuthError();
+        } else {
+          setError("Could not submit right now. Please try again.");
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [accountOptions, form.formId, onAuthError, onSubmitted, rawCharges, reasonOptions],
+  );
+
+  const isNavigatingRef = useRef(false);
+  const [flashingOptionValue, setFlashingOptionValue] = useState<string | null>(null);
+  const hasExactTwoCharges = answers.transactionIds.length === 2;
+
+  // Single select for Step 1 and 2: guarantees visible gray flash before setting answer & transitioning
+  const handleSingleSelect = (step: StepId, optionValue: string) => {
+    if (isNavigatingRef.current || submitting || isSubmitted) return;
+    setError(null);
+    isNavigatingRef.current = true;
+    setFlashingOptionValue(optionValue);
+
+    // Visible gray flash for 150ms
+    setTimeout(() => {
+      setFlashingOptionValue(null);
+      if (step === 1) {
+        setAnswers((prev) => ({ ...prev, accountId: optionValue }));
+      } else if (step === 2) {
+        setAnswers((prev) => ({ ...prev, reasonCode: optionValue }));
+      }
+
+      // Brief selection display (blue overlay) before sliding forward
+      setTimeout(() => {
+        setDirection("forward");
+        setCurrentStep((step + 1) as StepId);
+        isNavigatingRef.current = false;
+      }, 120);
+    }, 150);
   };
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const opened = await submitDispute({
-        formId: form.formId,
-        accountId,
-        reasonCode,
-        transactionIds,
-        note: note.trim() === "" ? undefined : note.trim(),
-        contactedMerchant,
-      });
-      onSubmitted(opened);
-    } catch (submitError) {
-      if (submitError instanceof ApiRequestError) {
-        setError(submitError.message);
-      } else if (submitError instanceof Error && submitError.name === "AuthenticationError") {
-        onAuthError();
-      } else {
-        setError("Could not submit right now. Please try again.");
+  // Toggle selection for Step 3 (Allows picking only up to 2 options)
+  const handleToggleTransaction = (txId: string) => {
+    setFlashingOptionValue(txId);
+    setTimeout(() => {
+      setFlashingOptionValue(null);
+    }, 150);
+
+    setAnswers((prev) => {
+      const isChecked = prev.transactionIds.includes(txId);
+      if (isChecked) {
+        return {
+          ...prev,
+          transactionIds: prev.transactionIds.filter((id) => id !== txId),
+        };
       }
-    } finally {
-      setSubmitting(false);
+      if (prev.transactionIds.length >= 2) {
+        // Enforce maximum of 2 selections
+        return prev;
+      }
+      return {
+        ...prev,
+        transactionIds: [...prev.transactionIds, txId],
+      };
+    });
+  };
+
+  // Step 4 merchant contact selection with visible gray flash
+  const handleSelectMerchantContact = (contacted: boolean) => {
+    const valKey = String(contacted);
+    setFlashingOptionValue(valKey);
+    setTimeout(() => {
+      setFlashingOptionValue(null);
+      setAnswers((prev) => ({
+        ...prev,
+        contactedMerchant: contacted,
+      }));
+    }, 150);
+  };
+
+  // Back affordance with backward swipe direction
+  const handleBack = () => {
+    if (isNavigatingRef.current || submitting || isSubmitted) return;
+    if (currentStep > 1) {
+      setError(null);
+      setDirection("backward");
+      setCurrentStep((prev) => (prev - 1) as StepId);
     }
   };
 
-  return (
-    <Animated.View
-      entering={FadeIn.duration(200)}
-      layout={LinearTransition.duration(180)}
-      className="px-4 py-2"
-    >
-      <View className="overflow-hidden rounded-2xl border border-chase-border bg-chase-card">
-        {/* Header */}
-        <View className="flex-row items-center border-b border-chase-border bg-chase-lightBlue px-4 py-3">
-          <View className="h-9 w-9 items-center justify-center rounded-full bg-chase-blue">
-            <ReceiptText color="#FFFFFF" size={17} strokeWidth={2} />
-          </View>
-          <View className="ml-3 flex-1">
-            <Text className="text-[15px] font-semibold text-chase-textPrimary">{form.title}</Text>
-            <Text className="mt-0.5 text-[12px] leading-4 text-chase-textSecondary">
-              Pick the charges you want a banker to review.
+  const renderTransactionItem = (
+    option: DisputeFormOption,
+    index: number,
+    isFirst: boolean = false,
+  ) => {
+    const isChecked = answers.transactionIds.includes(option.value);
+    const isMaxReached = answers.transactionIds.length >= 2 && !isChecked;
+    const dateStr = formatDate(option.createdAt);
+    const amountStr = formatAmount(option.amountCents);
+    const subtitle = [dateStr, amountStr].filter(Boolean).join(" · ");
+
+    return (
+      <Pressable
+        key={option.value}
+        ref={isFirst ? firstOptionRef : undefined}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: isChecked, disabled: isMaxReached }}
+        disabled={isMaxReached}
+        focusable={!isMaxReached}
+        onPress={() => handleToggleTransaction(option.value)}
+        className="border-t border-chase-border flex-row items-center justify-between px-4 py-3.5"
+        style={({ pressed, hovered }) =>
+          getOptionRowStyle({
+            isSelected: isChecked,
+            isFlashing: flashingOptionValue === option.value,
+            hovered,
+            pressed,
+            disabled: isMaxReached,
+          })
+        }
+      >
+        <View className="flex-row items-center flex-1 pr-3">
+          <BlueCheckbox checked={isChecked} disabled={isMaxReached} />
+          <View className="flex-1">
+            <Text className="text-[14px] font-medium text-chase-textPrimary leading-5">
+              {option.merchant ?? option.label}
             </Text>
+            {subtitle ? (
+              <Text className="mt-0.5 text-[12px] text-chase-textMuted leading-4">{subtitle}</Text>
+            ) : null}
           </View>
         </View>
+        <ChevronRight color={isChecked ? "#2563EB" : "#A79CAF"} size={16} strokeWidth={2} />
+      </Pressable>
+    );
+  };
 
-        <View className="px-4 py-4">
-          {/* Account */}
-          {accountField && (
-            <View>
-              <SectionLabel>Account</SectionLabel>
-              <View className="flex-row" style={{ gap: 8 }}>
-                {accountField.options.map((option) => {
-                  const selected = option.value === accountId;
-                  const [name, balance] = option.label.split(" — ");
-                  return (
-                    <Pressable
-                      key={option.value}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      disabled={isSubmitted}
-                      onPress={() => {
-                        setAccountId(option.value);
-                        setTransactionIds([]);
-                      }}
-                      className={`flex-1 rounded-xl border px-3 py-2.5 ${
-                        selected
-                          ? "border-chase-purple600 bg-chase-lightBlue"
-                          : "border-chase-border bg-white"
-                      }`}
-                    >
-                      <Text
-                        className={`text-[13px] ${
-                          selected
-                            ? "font-semibold text-chase-blue"
-                            : "font-medium text-chase-textSecondary"
-                        }`}
-                      >
-                        {name}
-                      </Text>
-                      <Text className="mt-0.5 text-[12px] text-chase-textMuted">{balance}</Text>
-                    </Pressable>
-                  );
-                })}
+  return (
+    <View className="mb-4 px-4 flex items-start">
+      <Animated.View
+        entering={FadeIn.duration(180)}
+        style={[
+          {
+            alignSelf: "flex-start",
+            width: "100%",
+            maxWidth: 360,
+            backgroundColor: "#FFFFFF",
+            borderColor: "#D4C8E0",
+            borderWidth: 1,
+            borderRadius: 14,
+            borderBottomLeftRadius: 4,
+            overflow: "hidden",
+          },
+          animatedBubbleStyle,
+        ]}
+      >
+        {/* Inner measurement container to drive smooth height transition without scaling */}
+        <View onLayout={onContentLayout} style={{ width: "100%" }}>
+          {isSubmitted ? (
+            <View className="p-4 flex-row items-center">
+              <View className="h-8 w-8 rounded-full bg-chase-lightBlue items-center justify-center mr-3">
+                <Check color="#5B3D85" size={16} strokeWidth={2.5} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[14px] font-semibold text-chase-textPrimary">
+                  Dispute submitted
+                </Text>
+                <Text className="text-[12px] text-chase-textMuted mt-0.5">
+                  Case {submittedCaseId ?? "opened"} · Under banker review
+                </Text>
               </View>
             </View>
-          )}
-
-          {/* Reason */}
-          {reasonField && (
-            <View className="mt-5">
-              <SectionLabel>What went wrong</SectionLabel>
-              <View style={{ gap: 6 }}>
-                {reasonField.options.map((option) => {
-                  const selected = option.value === reasonCode;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected }}
-                      disabled={isSubmitted}
-                      onPress={() => setReasonCode(option.value)}
-                      className={`flex-row items-center rounded-xl px-3 py-2.5 ${
-                        selected ? "bg-chase-lightBlue" : "bg-transparent"
-                      }`}
-                    >
-                      <View
-                        className={`mr-3 h-[18px] w-[18px] items-center justify-center rounded-full border-2 ${
-                          selected ? "border-chase-purple600" : "border-chase-border"
-                        }`}
-                      >
-                        {selected && (
-                          <View className="h-2 w-2 rounded-full bg-chase-purple600" />
-                        )}
-                      </View>
-                      <Text
-                        className={`flex-1 text-[13px] leading-5 ${
-                          selected
-                            ? "font-medium text-chase-textPrimary"
-                            : "text-chase-textSecondary"
-                        }`}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+          ) : (
+            <Animated.View
+              key={currentStep}
+              entering={
+                direction === "forward" ? SlideInRight.duration(220) : SlideInLeft.duration(220)
+              }
+              style={{ width: "100%" }}
+            >
+              {/* Question Header */}
+              <View className="flex-row items-center px-4 pt-3.5 pb-3">
+                {currentStep > 1 && !submitting && (
+                  <Pressable
+                    accessibilityLabel="Go back to previous step"
+                    accessibilityRole="button"
+                    onPress={handleBack}
+                    className="mr-2 -ml-1 p-1 rounded-md"
+                    style={({ pressed, hovered }) => ({
+                      backgroundColor:
+                        pressed ? "#E5E7EB" : hovered ? "rgba(91, 61, 133, 0.08)" : "transparent",
+                    })}
+                  >
+                    <ChevronLeft color="#5B3D85" size={18} strokeWidth={2.5} />
+                  </Pressable>
+                )}
+                <Text className="text-[15px] font-semibold text-chase-textPrimary flex-1 leading-5">
+                  {currentStep === 1
+                    ? "Which account is this about?"
+                    : currentStep === 2
+                      ? "What went wrong?"
+                      : currentStep === 3
+                        ? "Select a transaction"
+                        : "Have you contacted the merchant?"}
+                </Text>
               </View>
-            </View>
-          )}
 
-          {/* Charges */}
-          {chargesField && (
-            <View className="mt-5">
-              <SectionLabel>
-                {chargesRequired > 1 ? `Charges · pick ${chargesRequired}` : "Charges"}
-              </SectionLabel>
-
-              {suggested.length > 0 && (
-                <View style={{ gap: 6 }}>
-                  <Text className="text-[12px] text-chase-textSecondary">
-                    These two look like the same purchase.
-                  </Text>
-                  {suggested.map((option) => (
-                    <ChargeRow
-                      key={option.value}
-                      option={option}
-                      selected={transactionIds.includes(option.value)}
-                      disabled={isSubmitted}
-                      onPress={() => toggleCharge(option.value)}
-                    />
-                  ))}
+              {/* Error banner if submit fails */}
+              {error && (
+                <View className="border-t border-red-200 bg-red-50 px-4 py-2 flex-row items-center justify-between">
+                  <Text className="text-[12px] text-red-700 flex-1 pr-2">{error}</Text>
+                  <Pressable
+                    onPress={() => handleFinalSubmit(answers)}
+                    className="bg-red-700 px-2.5 py-1 rounded-md"
+                  >
+                    <Text className="text-[11px] font-semibold text-white">Retry</Text>
+                  </Pressable>
                 </View>
               )}
 
-              {others.length > 0 && suggested.length > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setShowAllCharges((value) => !value)}
-                  className="mt-2 flex-row items-center py-1"
-                >
-                  <Text className="text-[13px] font-medium text-chase-purple600">
-                    {showAllCharges
-                      ? "Hide other charges"
-                      : `Choose a different charge (${others.length})`}
-                  </Text>
-                  {showAllCharges ? (
-                    <ChevronUp color="#5B3D85" size={15} strokeWidth={2.5} />
-                  ) : (
-                    <ChevronDown color="#5B3D85" size={15} strokeWidth={2.5} />
+              {/* Step 1: Account Selection (with Blue Radio Circle) */}
+              {currentStep === 1 && (
+                <View>
+                  {accountOptions.map((option, index) => {
+                    const isSelected = answers.accountId === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        ref={index === 0 ? firstOptionRef : undefined}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                        focusable={true}
+                        onPress={() => handleSingleSelect(1, option.value)}
+                        className="border-t border-chase-border flex-row items-center justify-between px-4 py-3.5"
+                        style={({ pressed, hovered }) =>
+                          getOptionRowStyle({
+                            isSelected,
+                            isFlashing: flashingOptionValue === option.value,
+                            hovered,
+                            pressed,
+                          })
+                        }
+                      >
+                        <View className="flex-row items-center flex-1 pr-3">
+                          <BlueRadio selected={isSelected} />
+                          <View className="flex-1">
+                            <Text className="text-[14px] font-medium text-chase-textPrimary leading-5">
+                              {option.title}
+                            </Text>
+                            {option.subtitle ? (
+                              <Text className="mt-0.5 text-[12px] text-chase-textMuted leading-4">
+                                {option.subtitle}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                        <ChevronRight
+                          color={isSelected ? "#2563EB" : "#A79CAF"}
+                          size={16}
+                          strokeWidth={2}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Step 2: Issue Type Selection (with Blue Radio Circle) */}
+              {currentStep === 2 && (
+                <View>
+                  {reasonOptions.map((option, index) => {
+                    const isSelected = answers.reasonCode === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        ref={index === 0 ? firstOptionRef : undefined}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                        focusable={true}
+                        onPress={() => handleSingleSelect(2, option.value)}
+                        className="border-t border-chase-border flex-row items-center justify-between px-4 py-3.5"
+                        style={({ pressed, hovered }) =>
+                          getOptionRowStyle({
+                            isSelected,
+                            isFlashing: flashingOptionValue === option.value,
+                            hovered,
+                            pressed,
+                          })
+                        }
+                      >
+                        <View className="flex-row items-center flex-1 pr-3">
+                          <BlueRadio selected={isSelected} />
+                          <View className="flex-1">
+                            <Text className="text-[14px] font-medium text-chase-textPrimary leading-5">
+                              {option.title}
+                            </Text>
+                          </View>
+                        </View>
+                        <ChevronRight
+                          color={isSelected ? "#2563EB" : "#A79CAF"}
+                          size={16}
+                          strokeWidth={2}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Step 3: Transaction Selection (with Checkboxes - Allows Picking Only 2) */}
+              {currentStep === 3 && (
+                <View>
+                  {/* Micro-instruction indicating 2 options */}
+                  <View className="border-t border-chase-border bg-[#FAF8FC] px-4 py-2 flex-row items-center justify-between">
+                    <Text className="text-[12px] text-chase-textSecondary">
+                      Select 2 transactions to dispute
+                    </Text>
+                    <Text
+                      className={`text-[12px] font-semibold ${hasExactTwoCharges ? "text-blue-600" : "text-chase-textSecondary"
+                        }`}
+                    >
+                      {answers.transactionIds.length} / 2 selected
+                    </Text>
+                  </View>
+
+                  {/* Recommended Similar Transactions */}
+                  {recommendedCharges.map((option, index) =>
+                    renderTransactionItem(option, index, index === 0),
                   )}
-                </Pressable>
+
+                  {/* Dropdown for Remaining Transactions */}
+                  {otherCharges.length > 0 && (
+                    <View>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setShowOtherCharges((open) => !open)}
+                        className="border-t border-chase-border flex-row items-center justify-between px-4 py-3 bg-[#FAF8FC]"
+                        style={({ pressed, hovered }) => ({
+                          backgroundColor:
+                            pressed ? "#E5E7EB" : hovered ? "#F3F4F6" : "#FAF8FC",
+                          cursor: "pointer",
+                        })}
+                      >
+                        <Text className="text-[13px] font-semibold text-chase-purple600">
+                          {showOtherCharges
+                            ? "Hide other transactions"
+                            : `Choose a different transaction (${otherCharges.length})`}
+                        </Text>
+                        {showOtherCharges ? (
+                          <ChevronUp color="#5B3D85" size={16} strokeWidth={2} />
+                        ) : (
+                          <ChevronDown color="#5B3D85" size={16} strokeWidth={2} />
+                        )}
+                      </Pressable>
+
+                      {/* Scrollable area for remaining transactions */}
+                      {showOtherCharges && (
+                        <ScrollView
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={true}
+                          style={{ maxHeight: 180 }}
+                        >
+                          {otherCharges.map((option, index) =>
+                            renderTransactionItem(option, index),
+                          )}
+                        </ScrollView>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Continue Button to Advance to Review - Requires EXACTLY 2 */}
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!hasExactTwoCharges}
+                    onPress={() => {
+                      if (!hasExactTwoCharges) return;
+                      setDirection("forward");
+                      setCurrentStep(4);
+                    }}
+                    className={`border-t border-chase-border flex-row items-center justify-center px-4 py-3.5 ${hasExactTwoCharges ? "bg-blue-600 active:bg-blue-700" : "bg-gray-100"
+                      }`}
+                    style={({ pressed, hovered }) => ({
+                      cursor: (hasExactTwoCharges ? "pointer" : "not-allowed") as any,
+                      backgroundColor:
+                        hasExactTwoCharges
+                          ? pressed
+                            ? "#1E40AF"
+                            : hovered
+                              ? "#1D4ED8"
+                              : "#2563EB"
+                          : "#F3F4F6",
+                    })}
+                  >
+                    <Text
+                      className={`text-[14px] font-semibold ${hasExactTwoCharges ? "text-white" : "text-gray-400"
+                        }`}
+                    >
+                      {answers.transactionIds.length === 0
+                        ? "Select 2 charges to continue"
+                        : answers.transactionIds.length === 1
+                          ? "Select 1 more charge (1 of 2)"
+                          : "Continue (2 of 2 selected)"}
+                    </Text>
+                  </Pressable>
+                </View>
               )}
 
-              {/* Capped height: a long history scrolls inside the card rather
-                  than pushing the submit button off the conversation. */}
-              {listExpanded && others.length > 0 && (
-                <ScrollView
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={false}
-                  style={{ maxHeight: 208 }}
-                  contentContainerStyle={{ gap: 6, paddingTop: suggested.length > 0 ? 6 : 0 }}
-                >
-                  {others.map((option) => (
-                    <ChargeRow
-                      key={option.value}
-                      option={option}
-                      selected={transactionIds.includes(option.value)}
-                      disabled={isSubmitted}
-                      onPress={() => toggleCharge(option.value)}
-                    />
-                  ))}
-                </ScrollView>
-              )}
+              {/* Step 4: Merchant Contact & Review Submit Screen */}
+              {currentStep === 4 && (
+                <View>
+                  {/* Merchant Contact Radio Options with Blue Radio Circle */}
+                  {merchantContactOptions.map((option, index) => {
+                    const isSelected =
+                      answers.contactedMerchant === (option.value === "true");
+                    return (
+                      <Pressable
+                        key={option.value}
+                        ref={index === 0 ? firstOptionRef : undefined}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                        focusable={true}
+                        onPress={() => handleSelectMerchantContact(option.value === "true")}
+                        className="border-t border-chase-border flex-row items-center justify-between px-4 py-3.5"
+                        style={({ pressed, hovered }) =>
+                          getOptionRowStyle({
+                            isSelected,
+                            isFlashing: flashingOptionValue === option.value,
+                            hovered,
+                            pressed,
+                          })
+                        }
+                      >
+                        <View className="flex-row items-center flex-1 pr-3">
+                          <BlueRadio selected={isSelected} />
+                          <Text className="text-[14px] font-medium text-chase-textPrimary leading-5 flex-1">
+                            {option.title}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
 
-              {charges.length === 0 && (
-                <Text className="text-[13px] text-chase-textMuted">
-                  No recent charges on this account.
-                </Text>
+                  {/* Dispute Options Review Summary */}
+                  <View className="border-t border-chase-border bg-[#FAF8FC] px-4 py-3">
+                    <Text className="text-[11px] font-bold uppercase tracking-wider text-chase-textMuted mb-2">
+                      Review your selections
+                    </Text>
+                    <View style={{ gap: 4 }}>
+                      <View className="flex-row justify-between items-center">
+                        <Text className="text-[12px] text-chase-textSecondary">Account</Text>
+                        <Text className="text-[12px] font-medium text-chase-textPrimary">
+                          {selectedAccountLabel}
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between items-center">
+                        <Text className="text-[12px] text-chase-textSecondary">Issue</Text>
+                        <Text
+                          className="text-[12px] font-medium text-chase-textPrimary flex-1 text-right ml-4"
+                          numberOfLines={1}
+                        >
+                          {selectedReasonLabel}
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between items-start">
+                        <Text className="text-[12px] text-chase-textSecondary pt-0.5">
+                          Charges ({selectedTransactions.length})
+                        </Text>
+                        <View className="flex-1 items-end ml-4" style={{ gap: 2 }}>
+                          {selectedTransactions.length > 0 ? (
+                            selectedTransactions.map((tx) => (
+                              <Text
+                                key={tx.value}
+                                className="text-[12px] font-medium text-chase-textPrimary text-right"
+                                numberOfLines={1}
+                              >
+                                {tx.merchant ?? tx.label}
+                              </Text>
+                            ))
+                          ) : (
+                            <Text className="text-[12px] font-medium text-chase-textMuted text-right">
+                              None selected
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Submit Button */}
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={submitting || answers.contactedMerchant === null}
+                    onPress={() => handleFinalSubmit(answers)}
+                    className={`border-t border-chase-border flex-row items-center justify-center px-4 py-3.5 ${answers.contactedMerchant !== null && !submitting
+                        ? "bg-blue-600 active:bg-blue-700"
+                        : "bg-gray-100"
+                      }`}
+                    style={({ pressed, hovered }) => ({
+                      cursor:
+                        (answers.contactedMerchant !== null && !submitting ? "pointer" : "not-allowed") as any,
+                      backgroundColor:
+                        answers.contactedMerchant !== null && !submitting
+                          ? pressed
+                            ? "#1E40AF"
+                            : hovered
+                              ? "#1D4ED8"
+                              : "#2563EB"
+                          : "#F3F4F6",
+                    })}
+                  >
+                    {submitting ? (
+                      <>
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                        <Text className="ml-2 text-[14px] font-semibold text-white">
+                          Submitting dispute...
+                        </Text>
+                      </>
+                    ) : (
+                      <Text
+                        className={`text-[14px] font-semibold ${answers.contactedMerchant !== null ? "text-white" : "text-gray-400"
+                          }`}
+                      >
+                        Submit dispute
+                      </Text>
+                    )}
+                  </Pressable>
+
+                  <Text className="px-4 py-2.5 text-center text-[11px] leading-4 text-chase-textMuted bg-[#FAF8FC] border-t border-chase-border">
+                    A banker reviews your claim. Nothing is reversed yet.
+                  </Text>
+                </View>
               )}
-            </View>
+            </Animated.View>
           )}
-
-          {/* Details */}
-          <View className="mt-5">
-            <SectionLabel>Details</SectionLabel>
-            {contactedField && (
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: contactedMerchant }}
-                disabled={isSubmitted}
-                onPress={() => setContactedMerchant((value) => !value)}
-                className="flex-row items-center py-1"
-              >
-                <Checkbox checked={contactedMerchant} />
-                <Text className="ml-3 flex-1 text-[13px] text-chase-textSecondary">
-                  {contactedField.label}
-                </Text>
-              </Pressable>
-            )}
-
-            {noteField && !showNote && !isSubmitted && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowNote(true)}
-                className="mt-1 py-1"
-              >
-                <Text className="text-[13px] font-medium text-chase-purple600">Add a note</Text>
-              </Pressable>
-            )}
-
-            {noteField && (showNote || isSubmitted) && (
-              <TextInput
-                editable={!isSubmitted}
-                multiline
-                onChangeText={setNote}
-                placeholder="Anything else the reviewer should know? (optional)"
-                placeholderTextColor="#A79CAF"
-                value={note}
-                className="mt-2 min-h-[68px] rounded-xl border border-chase-border bg-white px-3 py-2.5 text-[13px] leading-5 text-chase-textPrimary"
-                style={{ textAlignVertical: "top" }}
-              />
-            )}
-          </View>
         </View>
-
-        {/* Footer: what is about to happen, then the action. */}
-        <View className="border-t border-chase-border bg-chase-bg px-4 py-3">
-          {error && (
-            <Text className="mb-2 text-[12px] text-red-600" accessibilityLiveRegion="polite">
-              {error}
-            </Text>
-          )}
-
-          <View className="mb-2.5 flex-row items-center justify-between">
-            <Text className="text-[12px] text-chase-textSecondary">
-              {transactionIds.length === 0
-                ? `Select ${chargesRequired} charge${chargesRequired === 1 ? "" : "s"} to continue`
-                : `${transactionIds.length} charge${
-                    transactionIds.length === 1 ? "" : "s"
-                  } selected`}
-            </Text>
-            {selectedTotal > 0 && (
-              <Text className="text-[13px] font-semibold text-chase-textPrimary">
-                {formatAmount(selectedTotal)}
-              </Text>
-            )}
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canSubmit }}
-            disabled={!canSubmit}
-            onPress={handleSubmit}
-            className={`flex-row items-center justify-center rounded-xl px-4 py-3 ${
-              canSubmit ? "bg-chase-blue active:bg-chase-purple600" : "bg-chase-border"
-            }`}
-          >
-            {submitting && <ActivityIndicator color="#FFFFFF" size="small" />}
-            <Text
-              className={`text-[14px] font-semibold ${submitting ? "ml-2" : ""} ${
-                canSubmit || isSubmitted ? "text-white" : "text-chase-textMuted"
-              }`}
-            >
-              {isSubmitted ? "Case opened" : "Open a dispute case"}
-            </Text>
-          </Pressable>
-
-          <Text className="mt-2 text-center text-[11px] leading-4 text-chase-textMuted">
-            A banker reviews it. Nothing is reversed yet.
-          </Text>
-        </View>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 }
 

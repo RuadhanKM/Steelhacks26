@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
+import { DisputeCaseCard } from "@/components/chat/DisputeCaseCard";
+import { DisputeFormCard } from "@/components/chat/DisputeFormCard";
 import {
     DayDivider,
     formatDayDivider,
@@ -37,6 +39,7 @@ import type {
     ChatMessage,
     ChatSystemNotice,
     ChatTimelineItem,
+    DisputeCase,
 } from "@/types/chat";
 import { appendChatEntry } from "@/types/chat";
 
@@ -88,6 +91,12 @@ export default function ChatScreen() {
     for (const entry of entries) {
       if (entry.kind === "message") {
         messageRun.push(entry);
+      } else if (entry.kind === "dispute_form") {
+        flushMessages();
+        items.push({ type: "dispute_form", id: entry.id, entry });
+      } else if (entry.kind === "dispute_case") {
+        flushMessages();
+        items.push({ type: "dispute_case", id: entry.id, entry });
       } else {
         flushMessages();
         items.push({ type: "system_notice", id: entry.id, notice: entry });
@@ -167,7 +176,19 @@ export default function ChatScreen() {
           toolTraces: response.toolTraces,
         };
 
-        setEntries((prev) => appendChatEntry(prev, assistantMessage));
+        setEntries((prev) => {
+          const next = appendChatEntry(prev, assistantMessage);
+          // The assistant hands back a server-built form; the customer fills it in.
+          if (!response.disputeForm) return next;
+          return [
+            ...next,
+            {
+              kind: "dispute_form",
+              id: `form_${response.disputeForm.formId}`,
+              form: response.disputeForm,
+            },
+          ];
+        });
         setDraft("");
         failedMessageRef.current = null;
       } catch (error) {
@@ -206,15 +227,50 @@ export default function ChatScreen() {
     }
   }, [handleSend]);
 
+  const handleDisputeSubmitted = useCallback((formEntryId: string, opened: DisputeCase) => {
+    setEntries((prev) => [
+      ...prev.map((entry) =>
+        entry.kind === "dispute_form" && entry.id === formEntryId
+          ? { ...entry, submittedCaseId: opened.id }
+          : entry,
+      ),
+      { kind: "dispute_case", id: `case_${opened.id}`, case: opened },
+    ]);
+    scrollToBottom();
+  }, [scrollToBottom]);
+
+  const handleCaseRefreshed = useCallback((updated: DisputeCase) => {
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.kind === "dispute_case" && entry.case.id === updated.id
+          ? { ...entry, case: updated }
+          : entry,
+      ),
+    );
+  }, []);
+
   const renderTimelineItem = useCallback(
     ({ item }: { item: ChatTimelineItem }) => {
       if (item.type === "day") return <DayDivider label={item.label} />;
       if (item.type === "system_notice") {
         return <SystemNotice notice={item.notice} onRetry={handleRetry} />;
       }
+      if (item.type === "dispute_form") {
+        return (
+          <DisputeFormCard
+            form={item.entry.form}
+            submittedCaseId={item.entry.submittedCaseId}
+            onSubmitted={(opened) => handleDisputeSubmitted(item.entry.id, opened)}
+            onAuthError={signOut}
+          />
+        );
+      }
+      if (item.type === "dispute_case") {
+        return <DisputeCaseCard case={item.entry.case} onRefreshed={handleCaseRefreshed} />;
+      }
       return <MessageGroup group={item.group} />;
     },
-    [handleRetry],
+    [handleCaseRefreshed, handleDisputeSubmitted, handleRetry, signOut],
   );
 
   const showQuickActions = entries.filter((entry) => entry.kind === "message").length <= 1;

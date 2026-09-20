@@ -32,7 +32,71 @@ export interface ChatSystemNotice {
   content: string;
 }
 
-export type ChatEntry = ChatMessage | ChatSystemNotice;
+/** One selectable option on a server-built form. */
+export interface DisputeFormOption {
+  value: string;
+  label: string;
+  accountId?: string | null;
+  merchant?: string | null;
+  amountCents?: number | null;
+  createdAt?: string | null;
+  isDuplicateCandidate?: boolean | null;
+  chargesRequired?: number | null;
+}
+
+export interface DisputeFormField {
+  name: string;
+  label: string;
+  type: "select" | "multiselect" | "boolean" | "textarea";
+  required: boolean;
+  helpText?: string | null;
+  prefill?: unknown;
+  options: DisputeFormOption[];
+}
+
+/**
+ * A dispute intake form. Every option comes from the customer's own accounts
+ * and transactions, built server-side — the assistant does not choose them.
+ */
+export interface DisputeForm {
+  formId: string;
+  title: string;
+  description: string;
+  expiresAt: string;
+  policyConfigVersion: string;
+  fields: DisputeFormField[];
+}
+
+export type DisputeStatus = "submitted" | "under_review" | "resolved" | "rejected";
+
+export interface DisputeCase {
+  id: string;
+  status: DisputeStatus;
+  reason?: string | null;
+  merchant?: string | null;
+  claimedAmountCents?: number | null;
+  transactionIds: string[];
+  note?: string | null;
+  reviewNote?: string | null;
+  reversalAmountCents?: number | null;
+  createdAt?: string | null;
+}
+
+/** The form rendered inside the conversation, and the case it opens. */
+export interface ChatDisputeForm {
+  kind: "dispute_form";
+  id: string;
+  form: DisputeForm;
+  submittedCaseId?: string;
+}
+
+export interface ChatDisputeCase {
+  kind: "dispute_case";
+  id: string;
+  case: DisputeCase;
+}
+
+export type ChatEntry = ChatMessage | ChatSystemNotice | ChatDisputeForm | ChatDisputeCase;
 
 export interface ChatMessageGroup {
   id: string;
@@ -45,7 +109,9 @@ export interface ChatMessageGroup {
 export type ChatTimelineItem =
   | { type: "day"; id: string; label: string }
   | { type: "group"; id: string; group: ChatMessageGroup }
-  | { type: "system_notice"; id: string; notice: ChatSystemNotice };
+  | { type: "system_notice"; id: string; notice: ChatSystemNotice }
+  | { type: "dispute_form"; id: string; entry: ChatDisputeForm }
+  | { type: "dispute_case"; id: string; entry: ChatDisputeCase };
 
 export interface ChatApiRequest {
   message: string;
@@ -63,6 +129,9 @@ export interface ChatApiResponse {
     name: string;
     timestamp: string;
   }>;
+  /** Present when the assistant handed back an intake form for the customer to fill in. */
+  disputeForm?: DisputeForm | null;
+  policyConfigVersion?: string;
 }
 
 export function appendChatEntry(entries: ChatEntry[], entry: ChatEntry): ChatEntry[] {

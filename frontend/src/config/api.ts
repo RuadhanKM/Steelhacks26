@@ -1,34 +1,35 @@
 /**
  * API configuration for the banking chat assistant.
- * Update API_BASE_URL to point to your backend server.
+ *
+ * Point this at the FastAPI backend in `backend/`. Set EXPO_PUBLIC_API_URL in
+ * frontend/.env to override it — required when testing on a phone, where
+ * "localhost" means the phone itself, not your computer (use your machine's LAN
+ * address, e.g. http://192.168.1.20:8000).
  */
 
-export const API_CONFIG = {
-  /**
-   * Base URL for the chat API endpoint.
-   * Change this to your production/staging server URL.
-   *
-   * Examples:
-   *   - Local dev:    "http://localhost:3000"
-   *   - Staging:      "https://staging-api.yourbank.com"
-   *   - Production:   "https://api.yourbank.com"
-   */
-  BASE_URL: "http://localhost:3000",
+const DEFAULT_BASE_URL = "http://localhost:8000";
 
-  /**
-   * The specific endpoint path for chat messages.
-   */
+export const API_CONFIG = {
+  /** Base URL of the FastAPI backend. `fastapi dev main.py` serves port 8000. */
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_BASE_URL,
+
+  /** Chat turns. */
   CHAT_ENDPOINT: "/api/chat",
 
-  /**
-   * Request timeout in milliseconds.
-   */
+  /** Dispute intake form, issued by the server from the customer's own data. */
+  DISPUTE_FORM_ENDPOINT: "/disputes/form",
+
+  /** Dispute cases: POST to open one, GET /disputes/{id} for status. */
+  DISPUTES_ENDPOINT: "/disputes",
+
+  /** Request timeout in milliseconds. */
   TIMEOUT_MS: 30000,
 } as const;
 
-/**
- * Returns the full chat API URL.
- */
+export function getApiUrl(path: string): string {
+  return `${API_CONFIG.BASE_URL}${path}`;
+}
+
 export function getChatUrl(): string {
-  return `${API_CONFIG.BASE_URL}${API_CONFIG.CHAT_ENDPOINT}`;
+  return getApiUrl(API_CONFIG.CHAT_ENDPOINT);
 }
